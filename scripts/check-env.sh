@@ -3,7 +3,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-services=(auth gateway)
+services=(auth gateway user)
 python_configs=()
 failures=0
 
