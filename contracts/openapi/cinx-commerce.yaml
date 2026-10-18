@@ -1,0 +1,171 @@
+openapi: 3.0.3
+info:
+  title: CINX Commerce API
+  version: 1.0.0
+  description: Plans, subscriptions, entitlements and provider callbacks.
+servers:
+  - url: /api/v1
+paths:
+  /plans:
+    get:
+      operationId: listPublishedPlans
+      security: []
+      responses:
+        '200': { $ref: '#/components/responses/ApiResponse' }
+  /plans/{planCode}:
+    get:
+      operationId: getPublishedPlan
+      security: []
+      parameters:
+        - { $ref: '#/components/parameters/PlanCode' }
+      responses:
+        '200': { $ref: '#/components/responses/ApiResponse' }
+        '404': { $ref: '#/components/responses/ProblemDetail' }
+  /subscriptions/me:
+    get:
+      operationId: getMySubscription
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/ApiResponse' }
+  /entitlements/me:
+    get:
+      operationId: getMyEntitlements
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/ApiResponse' }
+  /subscriptions/checkout-sessions:
+    post:
+      operationId: createSubscriptionCheckoutSession
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CheckoutSessionRequest' } } } }
+      responses:
+        '201': { $ref: '#/components/responses/ApiResponse' }
+        '403': { $ref: '#/components/responses/ProblemDetail' }
+        '409': { $ref: '#/components/responses/ProblemDetail' }
+  /subscriptions/me/change:
+    post:
+      operationId: changeSubscription
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SubscriptionChangeRequest' } } } }
+      responses: { '200': { $ref: '#/components/responses/ApiResponse' } }
+  /subscriptions/me/cancel:
+    post:
+      operationId: cancelSubscription
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      responses: { '200': { $ref: '#/components/responses/ApiResponse' } }
+  /subscriptions/me/resume:
+    post:
+      operationId: resumeSubscription
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      responses: { '200': { $ref: '#/components/responses/ApiResponse' } }
+  /billing/webhooks/{provider}:
+    post:
+      operationId: receiveBillingWebhook
+      security: []
+      parameters:
+        - { name: provider, in: path, required: true, schema: { type: string, enum: [STRIPE] } }
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+      responses:
+        '202': { description: Accepted }
+        '400': { $ref: '#/components/responses/ProblemDetail' }
+  /admin/plans:
+    post:
+      operationId: createPlanDraft
+      security: [{ bearerAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PlanDraftRequest' } } } }
+      responses: { '201': { $ref: '#/components/responses/ApiResponse' } }
+  /admin/plans/{planCode}/versions/{version}/validate:
+    post:
+      operationId: validatePlanVersion
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/PlanCode' }
+        - { $ref: '#/components/parameters/PlanVersion' }
+      responses: { '200': { $ref: '#/components/responses/ApiResponse' } }
+  /admin/plans/{planCode}/versions/{version}/publish:
+    post:
+      operationId: publishPlanVersion
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/PlanCode' }
+        - { $ref: '#/components/parameters/PlanVersion' }
+      responses: { '200': { $ref: '#/components/responses/ApiResponse' } }
+  /admin/plans/{planCode}/versions/{version}/retire:
+    post:
+      operationId: retirePlanVersion
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/PlanCode' }
+        - { $ref: '#/components/parameters/PlanVersion' }
+      responses: { '200': { $ref: '#/components/responses/ApiResponse' } }
+  /admin/subscriptions/{subscriptionId}/adjust:
+    post:
+      operationId: adjustSubscription
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: subscriptionId, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AdjustmentRequest' } } } }
+      responses: { '200': { $ref: '#/components/responses/ApiResponse' } }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+  responses:
+    ApiResponse:
+      description: Successful CINX API response.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiResponse' }
+    ProblemDetail:
+      description: RFC 9457 problem detail.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetail' }
+  parameters:
+    PlanCode: { name: planCode, in: path, required: true, schema: { type: string } }
+    PlanVersion: { name: version, in: path, required: true, schema: { type: integer, format: int64 } }
+    IdempotencyKey: { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 1, maxLength: 255 } }
+  schemas:
+    CheckoutSessionRequest:
+      type: object
+      required: [offerId, returnPath]
+      properties:
+        offerId: { type: string }
+        returnPath: { type: string, pattern: '^/' }
+    SubscriptionChangeRequest:
+      type: object
+      required: [offerId]
+      properties: { offerId: { type: string } }
+    PlanDraftRequest:
+      type: object
+      required: [code, productLine]
+      properties:
+        code: { type: string }
+        productLine: { type: string }
+    AdjustmentRequest:
+      type: object
+      required: [reason, effectiveFrom]
+      properties:
+        featureKey: { type: string }
+        value: { type: object, additionalProperties: true }
+        reason: { type: string, minLength: 1 }
+        effectiveFrom: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time, nullable: true }
+    ApiResponse:
+      type: object
+      properties:
+        success: { type: boolean }
+        message: { type: string }
+        data: { type: object, additionalProperties: true }
+    ProblemDetail:
+      type: object
+      properties:
+        type: { type: string, format: uri-reference }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        code: { type: string }

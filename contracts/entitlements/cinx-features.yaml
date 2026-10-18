@@ -1,0 +1,96 @@
+schemaVersion: "1.0"
+status: active
+description: >-
+  Canonical commercial feature registry. Plan data may reference only keys in
+  this registry; a feature never grants an authentication permission or role.
+
+composition:
+  boolean: ANY_TRUE
+  quota: MAX
+
+features:
+  - key: learning.subscription-catalog.access
+    owner: learning
+    valueType: BOOLEAN
+    public: true
+    saleable: true
+    operationBindings:
+      - learning.lesson-content-read
+      - learning.enroll-self
+
+  - key: learning.subscription-catalog.extended
+    owner: learning
+    valueType: BOOLEAN
+    public: true
+    saleable: false
+    operationBindings: []
+
+  - key: learning.offline-download
+    owner: learning
+    valueType: BOOLEAN
+    public: false
+    saleable: false
+    operationBindings: []
+
+  - key: learning.instructor.analytics.advanced
+    owner: learning
+    valueType: BOOLEAN
+    public: false
+    saleable: false
+    operationBindings: []
+
+  - key: learning.instructor.bulk-tools
+    owner: learning
+    valueType: BOOLEAN
+    public: false
+    saleable: false
+    operationBindings: []
+
+  - key: learning.instructor.subtitle.minutes
+    owner: learning
+    valueType: QUOTA
+    unit: MINUTE
+    resetPolicies: [CALENDAR_MONTH]
+    public: false
+    saleable: false
+    operationBindings: []
+
+  # The learner agent moved from recommendation to the assistant; the keys stay because plans and snapshots carry them.
+  - key: recommendation.agent.advanced
+    owner: assistant
+    valueType: BOOLEAN
+    public: true
+    saleable: true
+    operationBindings:
+      - assistant.agent-chat
+
+  - key: recommendation.agent.requests
+    owner: assistant
+    valueType: QUOTA
+    # 1 credit = 1,000 tokens weighted per model; the assistant meters real model usage.
+    unit: CREDIT
+    resetPolicies: [CALENDAR_MONTH, SUBSCRIPTION_PERIOD]
+    public: true
+    saleable: true
+    operationBindings:
+      - assistant.agent-chat
+
+  # Credits of the instructor persona (studio copilot, practice item jobs); learners never spend these.
+  - key: assistant.instructor.credits
+    owner: assistant
+    valueType: QUOTA
+    unit: CREDIT
+    resetPolicies: [CALENDAR_MONTH]
+    public: false
+    saleable: true
+    operationBindings:
+      - assistant.agent-chat
+
+  - key: recommendation.instructor.authoring.requests
+    owner: recommendation
+    valueType: QUOTA
+    unit: REQUEST
+    resetPolicies: [CALENDAR_MONTH]
+    public: false
+    saleable: false
+    operationBindings: []
