@@ -1,0 +1,812 @@
+openapi: 3.0.3
+info:
+  title: CINX Internal Service API
+  version: 1.0.0
+  description: |
+    Contract for synchronous service-to-service calls that have an active
+    OpenFeign client in Auth, User, Learning, or Notification.
+
+    These paths are not public API. The gateway denies `/internal/**`; service
+    discovery resolves the owning service. Internal callers must not route
+    these operations through the gateway.
+  x-cinx-contract-kind: internal-service-to-service
+
+tags:
+  - name: auth-internal
+    description: Internal identity projections owned by Auth.
+  - name: user-internal
+    description: Internal profile projections owned by User.
+  - name: learning-internal
+    description: Internal catalog and entitlement projections owned by Learning.
+  - name: assistant-internal
+    description: Internal AI wording owned by the assistant; called by Learning.
+
+paths:
+  /internal/reminders/text:
+    post:
+      tags: [assistant-internal]
+      operationId: writeStudyReminderText
+      summary: Reword a study reminder learning chose; any error means learning sends its template
+      description: |
+        The assistant is not in Eureka; learning calls it at a configured address and waits at most 5 seconds.
+        A rewrite that adds a link or a number the facts and template do not hold is refused with 422.
+      security: [{ serviceBearer: [] }]
+      x-cinx-audience: cinx-assistant-internal
+      x-cinx-token-kind: service
+      x-cinx-permission: assistant.internal.reminder.write
+      x-cinx-allowed-clients: [cinx-learning-service]
+      x-cinx-owner: assistant
+      x-cinx-consumers: [learning]
+      x-cinx-provider: assistant/app/api/internal_reminders.py
+      x-cinx-client: learning/src/main/java/com/cinx/learning/reminder/infrastructure/client/AssistantReminderClient.java
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reason, template]
+              properties:
+                reason:
+                  type: string
+                  enum: [PLAN_SESSION_PENDING, STREAK_AT_RISK, REVIEWS_DUE, DAILY_GOAL_PENDING, INACTIVE]
+                facts:
+                  type: object
+                  maxProperties: 10
+                  additionalProperties:
+                    oneOf: [{ type: string, maxLength: 300 }, { type: integer }]
+                template:
+                  type: object
+                  additionalProperties: false
+                  required: [title, body]
+                  properties:
+                    title: { type: string, minLength: 1, maxLength: 200 }
+                    body: { type: string, minLength: 1, maxLength: 500 }
+      responses:
+        '200':
+          description: The rewritten reminder
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [title, body]
+                properties:
+                  title: { type: string, maxLength: 60 }
+                  body: { type: string, maxLength: 180 }
+        '401': { $ref: '#/components/responses/ProblemDetail' }
+        '403': { $ref: '#/components/responses/ProblemDetail' }
+        '422': { $ref: '#/components/responses/ProblemDetail' }
+        '503': { $ref: '#/components/responses/ProblemDetail' }
+        '504': { $ref: '#/components/responses/ProblemDetail' }
+  /internal/entitlements/users/{userId}:
+    get:
+      tags: [commerce-internal]
+      operationId: getUserEntitlementSnapshot
+      summary: Reconcile one user's effective entitlement snapshot
+      security: [{ serviceBearer: [] }]
+      x-cinx-audience: cinx-commerce-internal
+      x-cinx-token-kind: service
+      x-cinx-permission: commerce.internal.entitlement.read
+      x-cinx-allowed-clients: [cinx-learning-service, cinx-recommendation-service, cinx-assistant-service]
+      x-cinx-owner: commerce
+      x-cinx-consumers: [learning, recommendation, assistant]
+      x-cinx-provider: commerce/src/main/java/com/cinx/commerce/subscription/api/InternalEntitlementController.java
+      x-cinx-client: assistant/app/billing/rehydration.py
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Effective full snapshot
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { $ref: '#/components/responses/ProblemDetail' }
+        '403': { $ref: '#/components/responses/ProblemDetail' }
+  /internal/identity/permissions/{permission}/user-ids:
+    get:
+      tags: [auth-internal]
+      operationId: findIdentityUserIdsByPermission
+      summary: Find active identity user IDs with an effective permission
+      security: [{ serviceBearer: [] }]
+      x-cinx-audience: cinx-auth-internal
+      x-cinx-token-kind: service
+      x-cinx-permission: auth.internal.permission-members.read
+      x-cinx-allowed-clients: [cinx-notification-service]
+      x-cinx-owner: auth
+      x-cinx-consumers: [notification]
+      x-cinx-provider: auth/src/main/java/com/cinx/auth/identity/api/InternalIdentityController.java
+      x-cinx-client: notification/src/main/java/com/cinx/notification/notification/infrastructure/client/IdentityClient.java
+      parameters:
+        - name: permission
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Active identity user IDs fetched successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseStringList'
+
+  /internal/identity/accounts/{userId}/authorization-state:
+    get:
+      tags: [auth-internal]
+      operationId: getAuthorizationState
+      summary: Rehydrate the minimal committed authorization state for one user
+      security: [{ serviceBearer: [] }]
+      x-cinx-audience: cinx-auth-internal
+      x-cinx-token-kind: service
+      x-cinx-permission: auth.internal.authorization-state.read
+      x-cinx-allowed-clients: [cinx-gateway-service, cinx-user-service, cinx-commerce-service, cinx-learning-service, cinx-notification-service, cinx-reporting-service, cinx-recommendation-service, cinx-assistant-service]
+      x-cinx-owner: auth
+      x-cinx-consumers: [gateway, user, commerce, learning, notification, reporting, recommendation, assistant]
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Authorization state fetched successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseAuthorizationState'
+
+  /internal/users/{id}:
+    get:
+      tags: [user-internal]
+      operationId: getInternalUserById
+      summary: Get a user profile by user ID
+      security: [{ serviceBearer: [] }]
+      x-cinx-audience: cinx-user-internal
+      x-cinx-token-kind: service
+      x-cinx-permission: user.internal.profile.read
+      x-cinx-allowed-clients: [cinx-learning-service, cinx-notification-service]
+      x-cinx-owner: user
+      x-cinx-consumers: [learning, notification]
+      x-cinx-provider: user/src/main/java/com/cinx/user/profile/api/InternalUserController.java
+      x-cinx-clients:
+        - learning/src/main/java/com/cinx/learning/catalog/infrastructure/client/UserService.java
+        - learning/src/main/java/com/cinx/learning/shared/infrastructure/client/UserService.java
+        - notification/src/main/java/com/cinx/notification/notification/infrastructure/client/UserClient.java
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User fetched successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseUser'
+
+  /internal/users/instructor-lookup:
+    get:
+      tags: [user-internal]
+      operationId: lookupInternalVerifiedInstructor
+      summary: Find the one verified instructor behind an exact email
+      description: |
+        Used by a course owner inviting a co-instructor. The email is trimmed and lower-cased; exactly one
+        verified, non-terminated instructor answers 200, anything else (none, a learner, several accounts) is 404.
+      security: [{ serviceBearer: [] }]
+      x-cinx-audience: cinx-user-internal
+      x-cinx-token-kind: service
+      x-cinx-permission: user.internal.profile.read
+      x-cinx-allowed-clients: [cinx-learning-service]
+      x-cinx-owner: user
+      x-cinx-consumers: [learning]
+      x-cinx-provider: user/src/main/java/com/cinx/user/profile/api/InternalUserController.java
+      x-cinx-client: learning/src/main/java/com/cinx/learning/catalog/infrastructure/client/UserService.java
+      parameters:
+        - name: email
+          in: query
+          required: true
+          schema:
+            type: string
+            format: email
+      responses:
+        '200':
+          description: Instructor fetched successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseInstructorLookup'
+        '404':
+          description: No single verified instructor uses this email (INSTRUCTOR_NOT_FOUND).
+
+  /internal/user-ids:
+    get:
+      tags: [user-internal]
+      operationId: getInternalUsersByIds
+      summary: Get user profiles by user IDs
+      security: [{ serviceBearer: [] }]
+      x-cinx-audience: cinx-user-internal
+      x-cinx-token-kind: service
+      x-cinx-permission: user.internal.profile.read
+      x-cinx-allowed-clients: [cinx-learning-service]
+      x-cinx-owner: user
+      x-cinx-consumers: [learning]
+      x-cinx-provider: user/src/main/java/com/cinx/user/profile/api/InternalUserController.java
+      x-cinx-clients:
+        - learning/src/main/java/com/cinx/learning/catalog/infrastructure/client/UserService.java
+        - learning/src/main/java/com/cinx/learning/community/infrastructure/client/UserClient.java
+      parameters:
+        - name: ids
+          in: query
+          required: true
+          description: Repeated query parameter containing user IDs.
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              type: string
+      responses:
+        '200':
+          description: Users fetched successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseUserList'
+
+  /internal/courses/{id}:
+    get:
+      tags: [learning-internal]
+      operationId: getNotificationCourseProjection
+      summary: Get the course projection used by Notification
+      description: |
+        Models the readable catalog response owned by InternalCourseController.
+        Notification intentionally deserializes the smaller subset it needs.
+      security: [{ serviceBearer: [] }]
+      x-cinx-audience: cinx-learning-internal
+      x-cinx-token-kind: service
+      x-cinx-permission: learning.internal.course.read
+      x-cinx-allowed-clients: [cinx-notification-service]
+      x-cinx-owner: learning
+      x-cinx-consumers: [notification]
+      x-cinx-provider: learning/src/main/java/com/cinx/learning/catalog/api/InternalCourseController.java
+      x-cinx-client: notification/src/main/java/com/cinx/notification/notification/infrastructure/client/CourseClient.java
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Course fetched successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseNotificationCourse'
+
+  /internal/enrollments/courses/{courseId}/users:
+    get:
+      tags: [learning-internal]
+      operationId: getEnrolledUserIdsForNotification
+      summary: Get IDs of users entitled to a course
+      security: [{ serviceBearer: [] }]
+      x-cinx-audience: cinx-learning-internal
+      x-cinx-token-kind: service
+      x-cinx-permission: learning.internal.enrollment.read
+      x-cinx-allowed-clients: [cinx-notification-service]
+      x-cinx-owner: learning
+      x-cinx-consumers: [notification]
+      x-cinx-provider: learning/src/main/java/com/cinx/learning/notificationprojection/api/internal/NotificationProjectionController.java
+      x-cinx-client: notification/src/main/java/com/cinx/notification/notification/infrastructure/client/EnrollmentClient.java
+      parameters:
+        - name: courseId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Enrolled user IDs fetched successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseStringList'
+
+  /internal/courses/{id}/instructor-ids:
+    get:
+      tags: [learning-internal]
+      operationId: getActiveCourseInstructorIds
+      summary: Get active instructor IDs for a course
+      security: [{ serviceBearer: [] }]
+      x-cinx-audience: cinx-learning-internal
+      x-cinx-token-kind: service
+      x-cinx-permission: learning.internal.course.read
+      x-cinx-allowed-clients: [cinx-notification-service]
+      x-cinx-owner: learning
+      x-cinx-consumers: [notification]
+      x-cinx-provider: learning/src/main/java/com/cinx/learning/catalog/api/InternalCourseController.java
+      x-cinx-client: notification/src/main/java/com/cinx/notification/notification/infrastructure/client/CourseClient.java
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Active course instructor IDs fetched successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseStringList'
+
+  /internal/courses/{courseId}/transcripts:
+    get:
+      tags: [learning-internal]
+      operationId: getPublishedCourseTranscripts
+      summary: READY subtitle tracks of a published course's video lessons, content inline
+      security: [{ serviceBearer: [] }]
+      x-cinx-audience: cinx-learning-internal
+      x-cinx-token-kind: service
+      x-cinx-permission: learning.internal.transcript.read
+      x-cinx-allowed-clients: [cinx-assistant-service]
+      x-cinx-owner: learning
+      x-cinx-consumers: [assistant]
+      x-cinx-provider: learning/src/main/java/com/cinx/learning/catalog/api/internal/InternalTranscriptController.java
+      x-cinx-client: assistant/app/knowledge/transcripts.py
+      parameters:
+        - name: courseId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Transcripts fetched; an unpublished course answers with no lessons.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseCourseTranscripts'
+
+  /internal/courses/materials/content:
+    get:
+      tags: [learning-internal]
+      operationId: getCourseMaterialContent
+      summary: Bytes of a file uploaded through the course presigned URL (courses/<uuid>-<name>), at most 25 MB
+      security: [{ serviceBearer: [] }]
+      x-cinx-audience: cinx-learning-internal
+      x-cinx-token-kind: service
+      x-cinx-permission: learning.internal.material.read
+      x-cinx-allowed-clients: [cinx-assistant-service]
+      x-cinx-owner: learning
+      x-cinx-consumers: [assistant]
+      x-cinx-provider: learning/src/main/java/com/cinx/learning/catalog/api/internal/InternalCourseMaterialController.java
+      x-cinx-client: assistant/app/materials/service.py
+      parameters:
+        - name: key
+          in: query
+          required: true
+          schema: { type: string, pattern: '^courses/[0-9a-f-]{36}-[^/]{1,200}$' }
+      responses:
+        '200':
+          description: The file's bytes.
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        '400':
+          description: Not a course upload key, or larger than 25 MB.
+        '404':
+          description: No object has that key.
+
+  /internal/community/reports:
+    get:
+      tags: [learning-internal]
+      operationId: listReportsForTriage
+      summary: Content reports with the reported content, read-only, for the admin copilot's triage
+      security: [{ serviceBearer: [] }]
+      x-cinx-audience: cinx-learning-internal
+      x-cinx-token-kind: service
+      x-cinx-permission: learning.internal.report.read
+      x-cinx-allowed-clients: [cinx-assistant-service]
+      x-cinx-owner: learning
+      x-cinx-consumers: [assistant]
+      x-cinx-provider: learning/src/main/java/com/cinx/learning/community/api/internal/InternalReportController.java
+      x-cinx-client: assistant/app/capabilities/admin/moderation.py
+      parameters:
+        - { name: type, in: query, schema: { type: string, enum: [REVIEW, QUESTION, ANSWER] } }
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: size, in: query, schema: { type: integer, default: 20, maximum: 50 } }
+        - { name: query, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: A page of reports, the same items as GET /api/v1/community/reports.
+          content:
+            application/json:
+              schema: { type: object }
+
+  /internal/reporting/overview:
+    get:
+      tags: [reporting-internal]
+      operationId: getReportingOverviewInternal
+      summary: Platform overview (active accounts, paid orders, enrollments) for the admin copilot
+      security: [{ serviceBearer: [] }]
+      x-cinx-audience: cinx-reporting-internal
+      x-cinx-token-kind: service
+      x-cinx-permission: reporting.internal.overview.read
+      x-cinx-allowed-clients: [cinx-assistant-service]
+      x-cinx-owner: reporting
+      x-cinx-consumers: [assistant]
+      x-cinx-provider: reporting/src/main/java/com/cinx/reporting/reporting/api/internal/InternalReportingController.java
+      x-cinx-client: assistant/app/capabilities/admin/metrics.py
+      responses:
+        '200':
+          description: The same body as GET /api/v1/reporting/overview.
+          content:
+            application/json:
+              schema: { type: object }
+
+  /internal/reporting/finance/overview:
+    get:
+      tags: [reporting-internal]
+      operationId: getFinanceOverviewInternal
+      summary: Paid orders and revenue; the assistant calls it only for an admin holding reporting.finance.read
+      security: [{ serviceBearer: [] }]
+      x-cinx-audience: cinx-reporting-internal
+      x-cinx-token-kind: service
+      x-cinx-permission: reporting.internal.overview.read
+      x-cinx-allowed-clients: [cinx-assistant-service]
+      x-cinx-owner: reporting
+      x-cinx-consumers: [assistant]
+      x-cinx-provider: reporting/src/main/java/com/cinx/reporting/reporting/api/internal/InternalReportingController.java
+      x-cinx-client: assistant/app/capabilities/admin/metrics.py
+      responses:
+        '200':
+          description: The same body as GET /api/v1/reporting/finance/overview.
+          content:
+            application/json:
+              schema: { type: object }
+
+components:
+  securitySchemes:
+    serviceBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  responses:
+    ProblemDetail:
+      description: RFC 9457 problem detail.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetail' }
+  schemas:
+    ProblemDetail:
+      type: object
+      properties:
+        type: { type: string, format: uri-reference }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        code: { type: string }
+
+    Gender:
+      type: string
+      enum: [MALE, FEMALE]
+
+    PartnershipTerminationReasonType:
+      type: string
+      enum:
+        - POLICY_VIOLATION
+        - FRAUD_OR_MISCONDUCT
+        - COPYRIGHT_VIOLATION
+        - INACTIVE_INSTRUCTOR
+        - OTHER
+
+    ApiResponseStringList:
+      type: object
+      required: [success, message, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+        data:
+          type: array
+          items:
+            type: string
+    ApiResponseCourseTranscripts:
+      type: object
+      required: [success, message, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+        data:
+          type: object
+          required: [courseId, published, lessons]
+          properties:
+            courseId: { type: string }
+            published:
+              type: boolean
+              description: false for a draft or archived course, which then lists no lessons.
+            lessons:
+              type: array
+              items:
+                type: object
+                required: [lessonId, tracks]
+                properties:
+                  lessonId: { type: string, description: The lesson's stable id. }
+                  title: { type: string }
+                  tracks:
+                    type: array
+                    items:
+                      type: object
+                      required: [trackId, languageCode, isDefault, content, sha256]
+                      properties:
+                        trackId: { type: string }
+                        languageCode: { type: string }
+                        isDefault: { type: boolean }
+                        content: { type: string, description: WebVTT text. }
+                        sha256: { type: string, description: Hex SHA-256 of content. }
+                        updatedAt: { type: string, format: date-time }
+
+    ApiResponseAuthorizationState:
+      type: object
+      required: [success, message, data]
+      properties:
+        success: { type: boolean }
+        message: { type: string }
+        data:
+          $ref: '#/components/schemas/AuthorizationState'
+
+    AuthorizationState:
+      type: object
+      required: [userId, status, roles, authorizationVersion, authorizationPolicyVersion, evaluatedAt]
+      properties:
+        userId: { type: string }
+        status: { type: string, enum: [ACTIVE, BANNED] }
+        roles:
+          type: array
+          items: { type: string }
+        authorizationVersion: { type: integer, format: int64, minimum: 1 }
+        authorizationPolicyVersion: { type: integer, format: int64, minimum: 1 }
+        evaluatedAt: { type: string, format: date-time }
+
+    ApiResponseUser:
+      type: object
+      required: [success, message, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: User fetched successfully
+        data:
+          $ref: '#/components/schemas/User'
+
+    ApiResponseInstructorLookup:
+      type: object
+      required: [success, message, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Instructor fetched successfully
+        data:
+          type: object
+          required: [id]
+          properties:
+            id: { type: string }
+            name: { type: string, nullable: true }
+            avatarUrl: { type: string, nullable: true }
+
+    ApiResponseUserList:
+      type: object
+      required: [success, message, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Users fetched successfully
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
+
+    ApiResponseNotificationCourse:
+      type: object
+      required: [success, message, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Course fetched
+        data:
+          $ref: '#/components/schemas/NotificationCourseProjection'
+
+    User:
+      type: object
+      description: Full response owned by User's InternalUserController.
+      properties:
+        userId:
+          type: string
+          example: user_123
+        name:
+          type: string
+          example: John Doe
+        email:
+          type: string
+          example: johndoe@example.com
+        gender:
+          allOf:
+            - $ref: '#/components/schemas/Gender'
+          nullable: true
+        isReceivePushNotification:
+          type: boolean
+          nullable: true
+          example: true
+        isInstructorVerified:
+          type: boolean
+          nullable: true
+          example: false
+        avatarUrl:
+          type: string
+          nullable: true
+          example: https://example.com/avatar.jpg
+        phoneNumber:
+          type: string
+          nullable: true
+          example: '0987654321'
+        bio:
+          type: string
+          nullable: true
+          example: Senior Frontend Developer
+        cvUrl:
+          type: string
+          nullable: true
+          example: https://example.com/cv.pdf
+        createdAt:
+          type: string
+          format: date-time
+          nullable: true
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+        lastAccessAt:
+          type: string
+          format: date-time
+          nullable: true
+        instructorVerifiedAt:
+          type: string
+          format: date-time
+          nullable: true
+        partnershipTerminatedAt:
+          type: string
+          format: date-time
+          nullable: true
+        partnershipTerminationReasonType:
+          allOf:
+            - $ref: '#/components/schemas/PartnershipTerminationReasonType'
+          nullable: true
+        partnershipTerminationReasonDetail:
+          type: string
+          nullable: true
+        isPartnershipTerminated:
+          type: boolean
+          nullable: true
+          example: false
+        instructorApplicationStatus:
+          type: string
+          enum: [NONE, PENDING, APPROVED, REJECTED]
+          nullable: true
+          example: PENDING
+
+    NotificationCourseProjection:
+      type: object
+      description: Readable catalog response; Notification consumes a compatible subset.
+      properties:
+        id:
+          type: string
+          example: course_123
+        title:
+          type: string
+          example: Introduction to Java
+        description:
+          type: string
+          nullable: true
+          example: Learn the basics of Java programming
+        category:
+          allOf:
+            - $ref: '#/components/schemas/CourseCategory'
+          nullable: true
+        instructor:
+          allOf:
+            - $ref: '#/components/schemas/CourseInstructor'
+          nullable: true
+        price:
+          type: number
+          nullable: true
+          example: 99000
+        discountedPrice:
+          type: number
+          nullable: true
+          example: 59000
+        discountRate:
+          type: integer
+          format: int64
+          nullable: true
+          example: 40
+        rating:
+          type: number
+          format: double
+          nullable: true
+          example: 4.8
+        enrollmentCount:
+          type: integer
+          format: int64
+          nullable: true
+          example: 1500
+        isInSubscription:
+          type: boolean
+          nullable: true
+          example: false
+        duration:
+          type: integer
+          format: int64
+          nullable: true
+          example: 3600
+        status:
+          type: string
+          nullable: true
+          example: PUBLISHED
+        publishStatus:
+          type: string
+          nullable: true
+          example: PUBLISHED
+        createdAt:
+          type: string
+          format: date-time
+          nullable: true
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    CourseCategory:
+      type: object
+      properties:
+        id:
+          type: string
+          example: cat_123
+        name:
+          type: string
+          example: Programming
+
+    CourseInstructor:
+      type: object
+      properties:
+        id:
+          type: string
+          example: inst_123
+        name:
+          type: string
+          example: John Doe
+        avatar:
+          type: string
+          nullable: true
+          example: avatar_url
