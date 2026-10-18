@@ -1,0 +1,830 @@
+schemaVersion: 1
+verifiedAt: "2026-07-11"
+
+# Machine-readable ownership and interaction map for humans and coding agents.
+# Update this file in the same change whenever a deployable, gateway route,
+# database owner, synchronous service call, or RabbitMQ binding changes.
+authoritativeSources:
+  modules: pom.xml
+  deployables: README.md
+  gatewayRoutes: gateway/src/main/resources/application.yaml
+  localDatabases: mysql-init/init.sql
+  javaConfiguration: "<module>/src/main/resources/application*.yaml"
+  messagingContract: contracts/asyncapi/cinx-events.yaml
+  runtimeMessaging: "service RabbitMQ configuration, publishers, and listeners"
+
+platform:
+  java: "21"
+  springBoot: "3.5.x"
+  serviceDiscovery: eureka
+  apiGateway: gateway
+  identityProvider: keycloak
+  persistence:
+    engine: mysql
+    version: "8.0"
+    rule: database-per-deployable
+  messaging:
+    broker: rabbitmq
+    version: "3"
+    exchanges:
+      auth.events.exchange: topic
+      user.events.exchange: topic
+      learning.events.exchange: topic
+      cinx.domain.events: topic
+      ai.subtitle.events.exchange: topic
+      dlx.exchange: direct
+      cinx.dlx: direct
+    contract: contracts/asyncapi/cinx-events.yaml
+  publicEntryPoint:
+    service: gateway
+    port: 9090
+    rule: "Clients use gateway routes only; /internal/** is denied at the gateway."
+
+verification:
+  currentGate: unit
+  integrationPolicy: "Deferred until the project-stabilization phase; do not run unless explicitly requested."
+  javaModule:
+    workingDirectory: .
+    unit: "mvn -pl <module> -am test"
+    deferredIntegration: "mvn -pl <module> -am -Pintegration verify"
+  javaAll:
+    workingDirectory: .
+    unit: "mvn test"
+    deferredIntegration: "mvn -Pintegration verify"
+  compose:
+    workingDirectory: .
+    command: "docker compose config --quiet"
+  subtitleAi:
+    workingDirectory: subtitle-ai
+    command: "python -m unittest discover -s tests"
+  recommendation:
+    workingDirectory: recommendation
+    command: "python -m unittest discover -s tests -p 'test_*.py'"
+
+sharedModules:
+  common:
+    path: common
+    deployable: false
+    purpose: "Shared response wrappers, exceptions, MVC/JPA/messaging utilities."
+    blastRadius: [auth, user, commerce, learning, notification, reporting]
+    verify: "mvn -pl common -am test"
+  common-security:
+    path: common-security
+    deployable: false
+    purpose: "Single source of truth for servlet-neutral JWT authority conversion; exposed transitively by common."
+    blastRadius: [gateway, auth, user, commerce, learning, notification, reporting]
+    verify: "mvn -pl common-security,common,gateway,auth,user,commerce,learning,notification,reporting -am test"
+
+services:
+  keycloak:
+    kind: identity-provider
+    path: keycloak
+    discoveryName: null
+    port:
+      container: 8080
+      localHost: 8180
+    owns:
+      - realm users and credentials
+      - CINX realm roles
+      - OAuth2/OIDC clients and sessions
+    database:
+      engine: mysql
+      name: keycloakdb
+      schemaManagement: keycloak
+    gatewayRoutes:
+      - /realms/**
+      - /resources/**
+    synchronousDependencies: []
+    publishes: []
+    consumes: []
+    verify:
+      workingDirectory: .
+      command: "python -m json.tool keycloak/realm/cinx-realm.json"
+
+  eureka:
+    kind: spring-boot-infrastructure
+    path: eureka
+    mavenModule: eureka
+    discoveryName: eureka
+    port: 8761
+    owns:
+      - service registration and discovery
+    database: null
+    gatewayRoutes: []
+    synchronousDependencies: []
+    publishes: []
+    consumes: []
+    verify:
+      unit: "mvn -pl eureka -am test"
+      deferredIntegration: "mvn -pl eureka -am -Pintegration verify"
+
+  gateway:
+    kind: spring-cloud-gateway
+    path: gateway
+    mavenModule: gateway
+    discoveryName: gateway
+    port: 9090
+    owns:
+      - public routing
+      - edge JWT validation and authorization defaults
+      - CORS and request correlation
+      - aggregated OpenAPI entry points
+      - the course-search rate limit (P1-01); its one-minute counters live in Redis, which it skips while Redis is down
+    database: null
+    cache:
+      engine: redis
+      purpose: rate-limit counters only, nothing persisted (compose service `redis`)
+    gatewayRoutes:
+      - routeId: identity-service-v2
+        target: auth
+        targetMode: eureka
+        paths: [/api/v1/identity/**]
+      - routeId: commerce-service-v2
+        target: commerce
+        targetMode: eureka
+        paths:
+          - /api/v1/cart/**
+          - /api/v1/wishlist/**
+          - /api/v1/orders/**
+          - /api/v1/vouchers/**
+          - /api/v1/payments/**
+          - /api/v1/plans/**
+          - /api/v1/subscriptions/**
+          - /api/v1/entitlements/**
+          - /api/v1/billing/**
+          - /api/v1/admin/plans/**
+          - /api/v1/admin/subscriptions/**
+      - routeId: user-profile-v2
+        target: user
+        targetMode: eureka
+        paths:
+          - /api/v1/profiles/**
+          - /api/v1/admin/profiles/**
+          - /api/v1/policies/**
+          - /api/v1/instructor-applications/**
+          - /api/v1/instructor-partnerships/**
+      - routeId: learning-service
+        target: learning
+        targetMode: eureka
+        paths:
+          - /api/v1/courses/**
+          - /api/v1/instructors/**
+          - /api/v1/admin/courses/**
+          - /api/v1/enrollments/**
+          - /api/v1/learning/**
+          - /api/v1/assessments/**
+          - /api/v1/community/**
+          - /api/v1/certificates/**
+      - routeId: notification-service
+        target: notification
+        targetMode: eureka
+        paths: [/api/v1/notifications/**]
+      - routeId: notification-websocket
+        target: notification
+        targetMode: eureka-websocket
+        paths: [/ws/**]
+      - routeId: notification-sockjs
+        target: notification
+        targetMode: eureka
+        paths: [/sockjs/**]
+      - routeId: recommendation-service
+        target: recommendation
+        targetMode: configured-url
+        paths: [/api/v1/recommendations/**]
+      - routeId: reporting-service
+        target: reporting
+        targetMode: eureka
+        paths: [/api/v1/reporting/**]
+      - routeId: keycloak
+        target: keycloak
+        targetMode: configured-url
+        paths: [/realms/**, /resources/**]
+    openApiRoutes:
+      - { path: /v3/api-docs/auth, target: auth, rewriteTo: /v3/api-docs }
+      - { path: /v3/api-docs/commerce, target: commerce, rewriteTo: /v3/api-docs }
+      - { path: /v3/api-docs/user, target: user, rewriteTo: /v3/api-docs }
+      - { path: /v3/api-docs/learning, target: learning, rewriteTo: /v3/api-docs }
+      - { path: /v3/api-docs/notification, target: notification, rewriteTo: /v3/api-docs }
+      - { path: /v3/api-docs/reporting, target: reporting, rewriteTo: /v3/api-docs }
+    synchronousDependencies:
+      - { target: eureka, purpose: service discovery }
+      - { target: keycloak, purpose: JWT issuer and JWKS }
+      - { target: auth, transport: HTTP, via: "lb://auth" }
+      - { target: user, transport: HTTP, via: "lb://user" }
+      - { target: commerce, transport: HTTP, via: "lb://commerce" }
+      - { target: learning, transport: HTTP, via: "lb://learning" }
+      - { target: notification, transport: HTTP/WebSocket, via: "lb://notification" }
+      - { target: reporting, transport: HTTP, via: "lb://reporting" }
+      - { target: recommendation, transport: HTTP, via: "recommendation.base-url" }
+    publishes: []
+    consumes: []
+    verify:
+      unit: "mvn -pl gateway -am test"
+      deferredIntegration: "mvn -pl gateway -am -Pintegration verify"
+
+  auth:
+    kind: spring-boot-domain-service
+    path: auth
+    mavenModule: auth
+    discoveryName: auth
+    port: 8888
+    owns:
+      - identity-to-Keycloak account mapping
+      - account status and platform role synchronization
+      - identity lifecycle outbox
+    database:
+      engine: mysql
+      name: authdb
+      schemaManagement: flyway
+      migrations: auth/src/main/resources/db/migration
+    gatewayRoutes:
+      - /api/v1/identity/accounts/**
+    internalApi:
+      - { method: GET, path: "/internal/identity/permissions/{permission}/user-ids" }
+      - { method: GET, path: "/internal/identity/accounts/{userId}/authorization-state" }
+    synchronousDependencies:
+      - target: keycloak
+        transport: REST
+        purpose: "Admin token, enable/disable account, realm role replacement, session revocation"
+        paths:
+          - /realms/{realm}/protocol/openid-connect/token
+          - /admin/realms/{realm}/users/{subject}
+          - /admin/realms/{realm}/users/{subject}/role-mappings/realm
+          - /admin/realms/{realm}/users/{subject}/logout
+    publishes:
+      - exchange: auth.events.exchange
+        delivery: transactional-outbox
+        routingKeys:
+          - auth.authorization.changed
+    consumes:
+      - exchange: user.events.exchange
+        queue: auth.user-lifecycle.queue
+        routingKeys:
+          - user.profile.onboarded
+          - user.instructor.verified
+          - user.instructor.terminated
+    externalDependencies:
+      - { target: keycloak, purpose: identity administration }
+    verify:
+      unit: "mvn -pl auth -am test"
+      deferredIntegration: "mvn -pl auth -am -Pintegration verify"
+
+  user:
+    kind: spring-boot-domain-service
+    path: user
+    mavenModule: user
+    discoveryName: user
+    port: 8089
+    owns:
+      - user profiles and onboarding
+      - instructor applications and verification state
+      - policy documents and versions
+    database:
+      engine: mysql
+      name: userdb
+      schemaManagement: flyway
+      migrations: user/src/main/resources/db/migration
+    gatewayRoutes:
+      - /api/v1/profiles/**
+      - /api/v1/admin/profiles/**
+      - /api/v1/policies/**
+      - /api/v1/instructor-applications/**
+      - /api/v1/instructor-partnerships/**
+    internalApi:
+      - { method: POST, path: /internal/users }
+      - { method: GET, path: "/internal/users/{id}" }
+      - { method: GET, path: /internal/user-ids }
+      - { method: GET, path: "/internal/users/{userId}/instructor-verified" }
+      - { method: GET, path: /internal/users/instructor-lookup }
+      - { method: POST, path: "/internal/users/{userId}/last-access" }
+      - { method: GET, path: /internal/users/metrics/total-count }
+      - { method: GET, path: /internal/users/metrics/new-count }
+    synchronousDependencies:
+      - target: auth
+        transport: HTTP
+        purpose: bounded authorization-state rehydration
+        paths: ["/internal/identity/accounts/{userId}/authorization-state"]
+    publishes:
+      - exchange: user.events.exchange
+        delivery: transactional-outbox
+        routingKeys:
+          - user.profile.onboarded
+          - user.instructor.pending
+          - user.instructor.application.submitted
+          - user.instructor.verified
+          - user.instructor.rejected
+          - user.instructor.terminated
+          - user.preference.updated
+          - user.learning-profile.updated
+          - user.policy.published
+          - user.policy.archived
+    consumes: []
+    externalDependencies:
+      - { target: s3-compatible-storage, purpose: profile upload and object deletion }
+    verify:
+      unit: "mvn -pl user -am test"
+      deferredIntegration: "mvn -pl user -am -Pintegration verify"
+
+  commerce:
+    kind: spring-boot-domain-service
+    path: commerce
+    mavenModule: commerce
+    discoveryName: commerce
+    port: 8087
+    owns:
+      - cart and wishlist
+      - orders, voucher redemption, and payment callbacks
+      - instructor revenue from order lines (owner, amount after voucher and fee percent snapshotted per line)
+      - sellable-course projection
+      - product lines, plan catalog and billing policies
+      - subscription lifecycle and effective entitlement snapshots
+      - commerce inbox and outbox
+    database:
+      engine: mysql
+      name: commercedb
+      schemaManagement: flyway
+      migrations: commerce/src/main/resources/db/migration
+    gatewayRoutes:
+      - /api/v1/cart/**
+      - /api/v1/wishlist/**
+      - /api/v1/orders/**
+      - /api/v1/vouchers/**
+      - /api/v1/payments/**
+      - /api/v1/plans/**
+      - /api/v1/subscriptions/**
+      - /api/v1/entitlements/**
+      - /api/v1/billing/**
+      - /api/v1/admin/plans/**
+      - /api/v1/admin/subscriptions/**
+    internalApi:
+      - { method: GET, path: "/internal/entitlements/users/{userId}" }
+    synchronousDependencies:
+      - target: auth
+        transport: HTTP
+        purpose: bounded authorization-state rehydration
+        paths: ["/internal/identity/accounts/{userId}/authorization-state"]
+    publishes:
+      - exchange: cinx.domain.events
+        delivery: transactional-outbox
+        routingKeys:
+          - commerce.order.paid
+          - commerce.wishlist.added
+          - commerce.wishlist.removed
+          - commerce.subscription.entitlements.changed
+    consumes:
+      - exchange: cinx.domain.events
+        queue: commerce.course-sellability
+        routingKeys: [learning.course.sellability.changed]
+      - exchange: cinx.domain.events
+        queue: commerce.learning-path-checkout
+        routingKeys: [learning.path.checkout.requested]
+      - exchange: auth.events.exchange
+        queue: commerce.auth-authorization.queue
+        routingKeys: [auth.authorization.changed]
+      - exchange: user.events.exchange
+        queue: commerce.user-onboarding.queue
+        routingKeys: [user.profile.onboarded]
+    verify:
+      unit: "mvn -pl commerce -am test"
+      deferredIntegration: "mvn -pl commerce -am -Pintegration verify"
+
+  learning:
+    kind: spring-boot-domain-service
+    path: learning
+    mavenModule: learning
+    discoveryName: learning
+    port: 8084
+    owns:
+      - course catalog, curriculum, lessons, and subtitle jobs
+      - course entitlements and learning progress
+      - assessments, community, certificates, goals, and learning paths
+      - the instructor workspace (inbox, overview, grading criteria, certificate conditions, review notes, activity log)
+      - the instructor course pages (course list with roles and lifecycle dates, learners, lesson reach, quiz summaries, co-instructor invitations, draft deletion)
+      - the course editor (readiness check shared with submit, draft-vs-live changes, intro video, image order, essay quiz questions)
+      - learning inboxes and outbox
+    database:
+      engine: mysql
+      name: learningdb
+      schemaManagement: flyway
+      migrations: learning/src/main/resources/db/migration
+    gatewayRoutes:
+      - /api/v1/courses/**
+      - /api/v1/instructors/**
+      - /api/v1/admin/courses/**
+      - /api/v1/enrollments/**
+      - /api/v1/learning/**
+      - /api/v1/assessments/**
+      - /api/v1/community/**
+      - /api/v1/certificates/**
+    internalApi:
+      - { method: GET, path: "/internal/courses/{id}" }
+      - { method: GET, path: "/internal/courses/{id}/lessons" }
+      - { method: GET, path: "/internal/courses/{courseId}/lessons/{lessonId}" }
+      - { method: GET, path: "/internal/lessons/{lessonId}/instructor-access" }
+      - { method: GET, path: "/internal/courses/{id}/curriculum" }
+      - { method: GET, path: /internal/courses/ids }
+      - { method: GET, path: /internal/courses/search-ids }
+      - { method: GET, path: "/internal/courses/instructors/{instructorId}/ids" }
+      - { method: GET, path: "/internal/courses/{id}/instructor-ids" }
+      - { method: POST, path: "/internal/courses/{id}/update-rating" }
+      - { method: POST, path: "/internal/courses/{id}/increase-enrollment" }
+      - { method: GET, path: "/internal/courses/{courseId}/lessons/{lessonId}/quizzes" }
+      - { method: GET, path: "/internal/courses/{courseId}/lessons/{lessonId}/videos" }
+      - { method: GET, path: "/internal/video-questions/{id}/check-answer" }
+      - { method: GET, path: "/internal/enrollments/courses/{courseId}/users" }
+      - { method: GET, path: "/internal/courses/{courseId}/transcripts" }
+      - { method: GET, path: /internal/courses/materials/content }
+      - { method: GET, path: /internal/community/reports }
+    synchronousDependencies:
+      - target: auth
+        transport: HTTP
+        purpose: bounded authorization-state rehydration
+        paths: ["/internal/identity/accounts/{userId}/authorization-state"]
+      - target: user
+        transport: openfeign
+        purpose: instructor and community user summaries
+        paths:
+          - /internal/users/{id}
+          - /internal/user-ids
+      - target: assistant
+        transport: openfeign (configured URL, not Eureka)
+        purpose: rewords a study reminder; on any error, a 5 s timeout or a switched-off capability the template is sent
+        paths: [/internal/reminders/text]
+    publishes:
+      - exchange: learning.events.exchange
+        delivery: transactional-outbox
+        routingKeys:
+          - course.lesson.changed
+          - course.content.published
+          - course.approval.requested
+          - course.collaborator.invited
+          - course.quiz.sync-and-regrade
+          - course.quiz.scoring-mode-changed
+          - course.course.published
+          - course.course.updated
+          - course.course.archived
+          - learning.subtitle.generate.requested
+          - learning.subtitle.translate.requested
+          - learning.enrollment.granted
+          - learning.course.completed
+          - learning.study-reminder.due
+          - learning.subtitle.job.finished
+          - learning.certificate.requested
+          - learning.certificate.approved
+          - question.created
+          - answer.created
+          - social.review.created
+      - exchange: cinx.domain.events
+        delivery: transactional-outbox
+        routingKeys:
+          - learning.course.sellability.changed
+          - learning.path.checkout.requested
+    consumes:
+      - exchange: cinx.domain.events
+        queue: learning.commerce-order-paid.queue
+        routingKeys: [commerce.order.paid]
+      - exchange: cinx.domain.events
+        queue: learning.subscription-entitlement.queue
+        routingKeys: [commerce.subscription.entitlements.changed]
+      - exchange: learning.events.exchange
+        queues:
+          - learning.catalog-enrollment-granted.queue
+          - learning.lesson-change.queue
+          - learning.sync-and-regrade.queue
+          - learning.quiz.scoring-mode-change.queue
+        routingKeys:
+          - learning.enrollment.granted
+          - course.content.published
+          - course.quiz.sync-and-regrade
+          - course.quiz.scoring-mode-changed
+      - exchange: ai.subtitle.events.exchange
+        queue: learning.subtitle.ai.queue
+        routingKeys:
+          - ai.subtitle.job.progress
+          - ai.subtitle.job.completed
+          - ai.subtitle.job.failed
+    externalDependencies:
+      - { target: s3-compatible-storage, purpose: course assets and presigned uploads }
+      - { target: cloudinary, purpose: media assets }
+    verify:
+      unit: "mvn -pl learning -am test"
+      deferredIntegration: "mvn -pl learning -am -Pintegration verify"
+
+  notification:
+    kind: spring-boot-domain-service
+    path: notification
+    mavenModule: notification
+    discoveryName: notification
+    port: 8086
+    owns:
+      - notification records and read state
+      - device tokens
+      - email, push, in-app, and WebSocket delivery
+    database:
+      engine: mysql
+      name: notificationdb
+      schemaManagement: flyway
+      migrations: notification/src/main/resources/db/migration
+    gatewayRoutes:
+      - /api/v1/notifications/**
+      - /ws/**
+      - /sockjs/**
+    internalApi: []
+    synchronousDependencies:
+      - target: user
+        transport: openfeign
+        purpose: notification recipient profile details
+        paths:
+          - /internal/users/{id}
+      - target: auth
+        transport: openfeign
+        purpose: capability recipients and bounded authorization-state rehydration
+        paths:
+          - /internal/identity/permissions/{permission}/user-ids
+          - /internal/identity/accounts/{userId}/authorization-state
+      - target: learning
+        transport: openfeign
+        purpose: course and enrollment projections
+        paths:
+          - /internal/courses/{id}
+          - /internal/enrollments/courses/{courseId}/users
+    publishes: []
+    consumes:
+      - exchange: cinx.domain.events
+        queue: notification.payment.queue
+        routingKeys: [commerce.order.paid]
+      - exchange: learning.events.exchange
+        queues:
+          - notification.course.queue
+          - notification.course-approval.queue
+          - notification.course-collaborator.queue
+          - notification.social.queue
+          - notification.learning.queue
+        routingKeys:
+          - course.content.published
+          - course.approval.requested
+          - course.collaborator.invited
+          - question.created
+          - answer.created
+          - social.review.created
+          - learning.course.completed
+          - learning.reminder.due
+          - learning.study-reminder.due
+          - learning.subtitle.job.finished
+          - learning.certificate.requested
+          - learning.certificate.approved
+      - exchange: auth.events.exchange
+        queue: notification.auth.queue
+        routingKeys: ["auth.#"]
+      - exchange: user.events.exchange
+        queue: notification.user.queue
+        routingKeys: ["user.#"]
+      - exchange: cinx.domain.events
+        queue: notification.subscription-entitlement.queue
+        routingKeys: [commerce.subscription.entitlements.changed]
+    externalDependencies:
+      - { target: firebase-cloud-messaging, purpose: push delivery }
+      - { target: smtp, purpose: email delivery }
+    verify:
+      unit: "mvn -pl notification -am test"
+      deferredIntegration: "mvn -pl notification -am -Pintegration verify"
+
+  reporting:
+    kind: spring-boot-projection-service
+    path: reporting
+    mavenModule: reporting
+    discoveryName: reporting
+    port: 8091
+    owns:
+      - account, order, and enrollment reporting projections
+      - reporting consumer inbox
+      - product events (180 days raw, daily counts kept), experiments and their exposures, and the analytics consent projection (P0-07)
+    database:
+      engine: mysql
+      name: reportingdb
+      schemaManagement: flyway
+      migrations: reporting/src/main/resources/db/migration
+    gatewayRoutes:
+      - /api/v1/reporting/**
+    internalApi:
+      - { method: GET, path: /internal/reporting/overview }
+      - { method: GET, path: /internal/reporting/finance/overview }
+    synchronousDependencies:
+      - target: auth
+        transport: HTTP
+        purpose: bounded authorization-state rehydration
+        paths: ["/internal/identity/accounts/{userId}/authorization-state"]
+    publishes: []
+    consumes:
+      - { exchange: auth.events.exchange, queue: reporting.auth.queue, routingKeys: ["auth.#"] }
+      - { exchange: cinx.domain.events, queue: reporting.commerce.queue, routingKeys: [commerce.order.paid] }
+      - { exchange: user.events.exchange, queue: reporting.user.queue, routingKeys: ["user.instructor.#"] }
+      - { exchange: learning.events.exchange, queue: reporting.learning.queue, routingKeys: [learning.enrollment.granted] }
+      - { exchange: cinx.domain.events, queue: reporting.subscription-entitlement.queue, routingKeys: [commerce.subscription.entitlements.changed] }
+      - { exchange: user.events.exchange, queue: reporting.analytics-consent.queue, routingKeys: [user.learning-profile.updated] }
+    verify:
+      unit: "mvn -pl reporting -am test"
+      deferredIntegration: "mvn -pl reporting -am -Pintegration verify"
+
+  recommendation:
+    kind: fastapi-domain-service
+    path: recommendation
+    discoveryName: null
+    port: 8090
+    deploymentStatus: "Manual during development; not in Docker Compose or CI."
+    owns:
+      - course and preference projections for recommendations
+      - recommendation interactions and ranking
+      - policy knowledge/RAG index
+      - hybrid course search used by the assistant (the learner agent moved to assistant)
+    database:
+      engine: mysql
+      name: recommendationdb
+      schemaManagement: alembic
+      migrations: recommendation/alembic/versions
+    gatewayRoutes:
+      - /api/v1/recommendations/**
+    internalApi: []
+    synchronousDependencies:
+      - target: auth
+        transport: HTTP
+        purpose: rehydrate required authorization version within the five-second freshness bound
+        paths: ["/internal/identity/accounts/{userId}/authorization-state"]
+        authentication: service-jwt
+    publishes: []
+    consumerDelivery: >-
+      Every projection event is applied once, keyed by eventId in recommendation_event_inbox and
+      committed with the change (entitlement snapshots keep their own inbox and version check).
+      Transient failures wait in <queue>.retry (per-message TTL 5 s, 30 s, 120 s) and return to the
+      queue; after three retries, or at once for an invalid payload, the message goes to the
+      queue's error queue with failure headers.
+    consumes:
+      - exchange: learning.events.exchange
+        queue: recommendation.course.queue
+        routingKeys:
+          - course.course.published
+          - course.course.updated
+          - course.course.archived
+      - exchange: learning.events.exchange
+        queue: recommendation.enrollment.queue
+        routingKeys: [learning.enrollment.granted]
+      - exchange: cinx.domain.events
+        queue: recommendation.social.queue
+        routingKeys:
+          - commerce.wishlist.added
+          - commerce.wishlist.removed
+      - exchange: user.events.exchange
+        queue: recommendation.user.queue
+        routingKeys:
+          - user.preference.updated
+          - user.learning-profile.updated
+          - user.policy.published
+          - user.policy.archived
+      - exchange: cinx.domain.events
+        queue: recommendation.subscription-entitlement.queue
+        routingKeys: [commerce.subscription.entitlements.changed]
+    externalDependencies:
+      - { target: keycloak, purpose: JWT issuer and JWKS }
+      - { target: digitalocean-inference, purpose: LLM inference }
+      - { target: local-embedding-model, purpose: semantic retrieval }
+    verify:
+      workingDirectory: recommendation
+      command: "python -m unittest discover -s tests -p 'test_*.py'"
+
+  assistant:
+    kind: fastapi-domain-service
+    path: assistant
+    discoveryName: null
+    port: 8092
+    deploymentStatus: "Manual during development; Postgres runs under the compose 'assistant' profile, vLLM under 'gpu'."
+    owns:
+      - assistant sessions and turns (persona, placement, model message history)
+      - pending actions, their approvals and the append-only action audit
+      - capability kill switches, per-capability daily usage and AI policy acceptance
+      - DBOS workflow state for action execution (schema dbos)
+    database:
+      engine: postgres
+      name: assistantdb
+      schemaManagement: alembic
+      migrations: assistant/alembic/versions
+    gatewayRoutes:
+      - /api/v1/assistant/**
+      - /v3/api-docs/assistant
+    internalApi: []
+    synchronousDependencies:
+      - target: auth
+        transport: HTTP
+        purpose: rehydrate required authorization version within the five-second freshness bound
+        paths: ["/internal/identity/accounts/{userId}/authorization-state"]
+        authentication: service-jwt (cinx-assistant-service)
+      - target: commerce
+        transport: HTTP
+        purpose: >-
+          reconcile a missing or expired entitlement projection before a credit reservation or usage read, at most
+          once per user per cooldown
+        paths: ["/internal/entitlements/users/{userId}"]
+        authentication: service-jwt (cinx-assistant-service, audience cinx-commerce-internal)
+      - target: learning
+        transport: HTTP
+        purpose: >-
+          agent tools (curriculum, lesson transcripts, progress, study plan, goals, streak, quiz review, paths) and
+          approved actions (create a path, replace its lessons)
+        paths:
+          - /api/v1/courses
+          - /api/v1/courses/{id}/curriculum
+          - /api/v1/courses/{courseId}/lessons/{lessonId}/videos/subtitles
+          - /api/v1/courses/{courseId}/lessons/{lessonId}/videos/subtitles/{subtitleId}/content
+          - /api/v1/learning/paths
+          - /api/v1/learning/paths/{id}/items
+          - /api/v1/learning/my-courses
+          - /api/v1/learning/study-plan
+          - /api/v1/learning/daily-goals
+          - /api/v1/learning/streaks/me
+          - /api/v1/assessments/lessons/{lessonId}/quiz-sessions
+          - /api/v1/assessments/quiz-sessions/{id}
+          - /api/v1/assessments/quiz-sessions/{id}/questions
+        authentication: token-exchange (cinx-assistant, audience cinx-api; the approver's token for writes)
+      - target: recommendation
+        transport: HTTP
+        purpose: hybrid course search
+        paths:
+          - /api/v1/recommendations/search
+        authentication: token-exchange (cinx-assistant, audience cinx-api)
+      - target: user
+        transport: HTTP
+        purpose: one-off backfill of published policies (scripts/backfill_policies.py)
+        paths:
+          - /api/v1/policies
+          - /api/v1/policies/{slug}
+        authentication: none (public policy API)
+      - target: user
+        transport: HTTP
+        purpose: the learner's learning profile for the coach and learning-path tools (learner_get_profile)
+        paths:
+          - /api/v1/profiles/me/learning-profile
+        authentication: token-exchange (cinx-assistant, audience cinx-api)
+    publishes:
+      - exchange: cinx.domain.events
+        delivery: "transactional outbox (outbox_event) relayed with publisher confirms"
+        routingKeys: [assistant.action.decided]
+    consumerDelivery: >-
+      Entitlement snapshots apply once by eventId (entitlement_inbox) and only when newer than the stored
+      version; transient failures wait in <queue>.retry (5 s, 30 s, 120 s), invalid payloads and exhausted
+      retries go to the dead queue.
+    consumes:
+      - exchange: cinx.domain.events
+        queue: assistant.subscription-entitlement.queue
+        routingKeys: [commerce.subscription.entitlements.changed]
+      - exchange: user.events.exchange
+        queue: assistant.policy.queue
+        routingKeys: [user.policy.published, user.policy.archived]
+    externalDependencies:
+      - { target: keycloak, purpose: JWT issuer, JWKS and standard token exchange }
+      - { target: openai-compatible-llm, purpose: "LLM inference; self-hosted vLLM today" }
+    verify:
+      workingDirectory: assistant
+      command: "python -m compileall app evals"
+
+  subtitle-ai:
+    kind: fastapi-worker
+    path: subtitle-ai
+    discoveryName: null
+    port: 8091
+    deploymentStatus: "Manual during development; not in Docker Compose or CI."
+    owns:
+      - subtitle generation and translation jobs while processing
+      - ASR, alignment, segmentation, and subtitle output generation
+    database: null
+    gatewayRoutes: []
+    internalApi:
+      - { method: GET, path: /health }
+    synchronousDependencies: []
+    publishes:
+      - exchange: ai.subtitle.events.exchange
+        delivery: "direct publish with bounded retry; no transactional outbox"
+        routingKeys:
+          - ai.subtitle.job.progress
+          - ai.subtitle.job.completed
+          - ai.subtitle.job.failed
+    consumes:
+      - exchange: learning.events.exchange
+        queue: subtitle-ai.learning.queue
+        routingKeys:
+          - learning.subtitle.generate.requested
+      - exchange: learning.events.exchange
+        queue: subtitle-ai.learning.translate.queue
+        routingKeys:
+          - learning.subtitle.translate.requested
+    externalDependencies:
+      - { target: s3-compatible-storage, purpose: source and generated subtitle files }
+      - { target: digitalocean-inference, purpose: subtitle text processing }
+    verify:
+      workingDirectory: subtitle-ai
+      command: "python -m unittest discover -s tests"
+
+knownContractGaps:
+  - id: python-deployment-and-ci
+    severity: verification-gap
+    services: [recommendation, subtitle-ai]
+    observation: "Both Python deployables remain intentionally excluded from Docker Compose and service CI; their unit tests must be run explicitly."
+    source: README.md
