@@ -1,0 +1,43 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: mysql
+    ports:
+    - "3300:3306"
+    networks:
+    - cinx-network
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./mysql-init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -p\"$${MYSQL_ROOT_PASSWORD}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    env_file:
+    - ./env/dev/mysql.env
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+    - "5672:5672"
+    - "15672:15672"
+    networks:
+    - cinx-network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    env_file:
+    - ./env/dev/rabbitmq.env
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+networks:
+  cinx-network:
+    driver: bridge
+    name: cinx-network
+
+volumes:
+  mysql-data:
+  rabbitmq-data:
