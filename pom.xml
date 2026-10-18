@@ -18,6 +18,7 @@
 
     <modules>
         <module>eureka</module>
+        <module>gateway</module>
         <module>common-security</module>
         <module>common</module>
     </modules>

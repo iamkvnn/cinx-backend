@@ -33,6 +33,20 @@ services:
     - ./env/dev/rabbitmq.env
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
+  # the gateway's search rate-limit counters only; they live a minute, so nothing is persisted
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+    - "6379:6379"
+    networks:
+    - cinx-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
   eureka-server:
     container_name: eureka-server
     ports:
@@ -47,6 +61,23 @@ services:
       start_period: 30s
     build: ./eureka
     image: cinx-eureka:local
+  gateway:
+    container_name: gateway
+    ports:
+    - "9090:9090"
+    networks:
+    - cinx-network
+    depends_on:
+      eureka-server:
+        condition: service_started
+      # started first, but not awaited healthy: the limit lets searches through while Redis is away
+      redis:
+        condition: service_started
+    env_file:
+    - ./env/dev/common.env
+    - ./env/dev/gateway.env
+    build: ./gateway
+    image: cinx-gateway:local
 networks:
   cinx-network:
     driver: bridge
