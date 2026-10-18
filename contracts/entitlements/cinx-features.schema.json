@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cinx.local/contracts/entitlements/cinx-features.schema.json",
+  "type": "object",
+  "required": ["schemaVersion", "features", "composition"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["active", "draft"] },
+    "description": { "type": "string" },
+    "composition": {
+      "type": "object",
+      "required": ["boolean", "quota"],
+      "additionalProperties": false,
+      "properties": {
+        "boolean": { "const": "ANY_TRUE" },
+        "quota": { "const": "MAX" }
+      }
+    },
+    "features": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/feature" }
+    }
+  },
+  "$defs": {
+    "feature": {
+      "type": "object",
+      "required": ["key", "owner", "valueType", "public", "saleable", "operationBindings"],
+      "additionalProperties": false,
+      "properties": {
+        "key": { "type": "string", "pattern": "^[a-z][a-z0-9-]*(?:\\.[a-z0-9-]+)+$" },
+        "owner": { "enum": ["learning", "recommendation", "notification", "reporting", "assistant"] },
+        "valueType": { "enum": ["BOOLEAN", "QUOTA"] },
+        "unit": { "enum": ["REQUEST", "MINUTE", "CREDIT"] },
+        "resetPolicies": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "enum": ["CALENDAR_MONTH", "SUBSCRIPTION_PERIOD"] }
+        },
+        "public": { "type": "boolean" },
+        "saleable": { "type": "boolean" },
+        "operationBindings": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

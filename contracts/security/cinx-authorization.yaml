@@ -1,0 +1,173 @@
+schemaVersion: "1.0"
+policyVersion: 1
+status: active
+
+permissions:
+  user:
+    - auth.account.read.any
+    - auth.account.suspend.any
+    - auth.account.reactivate.any
+    - auth.role.assign.any
+    - user.profile.read.self
+    - user.profile.read.any
+    - user.profile.update.self
+    - user.profile.update.any
+    - user.instructor.apply.self
+    - user.instructor.review.any
+    - user.policy.manage.any
+    - user.policy.publish.any
+    - commerce.cart.manage.self
+    - commerce.wishlist.manage.self
+    - commerce.order.create.self
+    - commerce.order.read.self
+    - commerce.order.read.any
+    - commerce.voucher.manage.any
+    - commerce.plan.manage.any
+    - commerce.subscription.read.self
+    - commerce.subscription.change.self
+    - commerce.subscription.adjust.any
+    - commerce.payment.reconcile.any
+    - commerce.refund.manage.any
+    - learning.course.create
+    - learning.course.update.own
+    - learning.course.update.any
+    - learning.curriculum.update.own
+    - learning.course.review.any
+    - learning.course.publish.any
+    - learning.course.subscription-policy.manage.any
+    - learning.featured.manage.any
+    - learning.progress.read.self
+    - learning.progress.write.self
+    - learning.progress.read.own-course
+    - learning.submission.grade.own
+    - learning.community.moderate.any
+    - learning.analytics.read.own
+    - learning.analytics.read.any
+    - recommendation.agent.use
+    - recommendation.session.read.self
+    - recommendation.session.write.self
+    - recommendation.user.read.any
+    - recommendation.agent.debug
+    - assistant.agent.use.learner
+    - assistant.agent.use.instructor
+    - assistant.agent.use.admin
+    - assistant.action.approve.self
+    - assistant.capability.manage.any
+    - notification.read.self
+    - notification.update.self
+    - notification.test.send.any
+    - notification.broadcast.send.any
+    - reporting.dashboard.read
+    - reporting.finance.read
+    - reporting.experiment.manage.any
+  internal:
+    cinx-auth-internal:
+      - auth.internal.permission-members.read
+      - auth.internal.authorization-state.read
+    cinx-user-internal:
+      - user.internal.profile.read
+    cinx-commerce-internal:
+      - commerce.internal.entitlement.read
+    cinx-learning-internal:
+      - learning.internal.course.read
+      - learning.internal.enrollment.read
+      - learning.internal.transcript.read
+      - learning.internal.material.read
+      - learning.internal.report.read
+    cinx-reporting-internal:
+      - reporting.internal.overview.read
+
+roles:
+  LEARNER:
+    permissions:
+      - user.profile.read.self
+      - user.profile.update.self
+      - user.instructor.apply.self
+      - commerce.cart.manage.self
+      - commerce.wishlist.manage.self
+      - commerce.order.create.self
+      - commerce.order.read.self
+      - commerce.subscription.read.self
+      - commerce.subscription.change.self
+      - learning.progress.read.self
+      - learning.progress.write.self
+      - recommendation.agent.use
+      - recommendation.session.read.self
+      - recommendation.session.write.self
+      - assistant.agent.use.learner
+      - assistant.action.approve.self
+      - notification.read.self
+      - notification.update.self
+  INSTRUCTOR:
+    permissions:
+      - learning.course.create
+      - learning.course.update.own
+      - learning.curriculum.update.own
+      - learning.progress.read.own-course
+      - learning.submission.grade.own
+      - learning.analytics.read.own
+      - assistant.agent.use.instructor
+      - assistant.action.approve.self
+  INSTRUCTOR_OPERATIONS:
+    permissions: [user.instructor.review.any]
+  CONTENT_REVIEWER:
+    permissions: [learning.course.review.any, learning.course.publish.any, assistant.agent.use.admin]
+  CATALOG_MANAGER:
+    permissions: [commerce.plan.manage.any, learning.course.subscription-policy.manage.any, learning.featured.manage.any]
+  COMMUNITY_MODERATOR:
+    permissions: [learning.community.moderate.any, assistant.agent.use.admin]
+  POLICY_MANAGER:
+    permissions: [user.policy.manage.any, user.policy.publish.any]
+  PROMOTION_MANAGER:
+    permissions: [commerce.voucher.manage.any]
+  SUPPORT_AGENT:
+    permissions: [auth.account.read.any, user.profile.read.any, commerce.order.read.any, recommendation.user.read.any]
+  IDENTITY_ADMIN:
+    permissions: [auth.account.read.any, auth.account.suspend.any, auth.account.reactivate.any, auth.role.assign.any]
+  FINANCE_OPERATOR:
+    permissions: [commerce.order.read.any, commerce.subscription.adjust.any, commerce.payment.reconcile.any, commerce.refund.manage.any, reporting.finance.read]
+  REPORT_ANALYST:
+    permissions: [learning.analytics.read.any, reporting.dashboard.read, reporting.experiment.manage.any, assistant.agent.use.admin]
+  NOTIFICATION_OPERATOR:
+    permissions: [notification.broadcast.send.any]
+  AI_OPERATOR:
+    permissions: [recommendation.user.read.any, recommendation.agent.debug, assistant.agent.use.admin, assistant.capability.manage.any]
+  PLATFORM_ADMIN:
+    includes: [INSTRUCTOR_OPERATIONS, CONTENT_REVIEWER, CATALOG_MANAGER, COMMUNITY_MODERATOR, POLICY_MANAGER, PROMOTION_MANAGER, SUPPORT_AGENT, IDENTITY_ADMIN, FINANCE_OPERATOR, REPORT_ANALYST, NOTIFICATION_OPERATOR, AI_OPERATOR]
+  BREAK_GLASS_ADMIN:
+    includes: [PLATFORM_ADMIN]
+    permissions: [user.profile.update.any, learning.course.update.any]
+    maximumGrantSeconds: 3600
+
+serviceGrants:
+  cinx-auth-internal:
+    cinx-notification-service:
+      - auth.internal.permission-members.read
+      - auth.internal.authorization-state.read
+    cinx-gateway-service: [auth.internal.authorization-state.read]
+    cinx-user-service: [auth.internal.authorization-state.read]
+    cinx-commerce-service: [auth.internal.authorization-state.read]
+    cinx-learning-service: [auth.internal.authorization-state.read]
+    cinx-reporting-service: [auth.internal.authorization-state.read]
+    cinx-recommendation-service: [auth.internal.authorization-state.read]
+    cinx-assistant-service: [auth.internal.authorization-state.read]
+  cinx-user-internal:
+    cinx-learning-service: [user.internal.profile.read]
+    cinx-notification-service: [user.internal.profile.read]
+  cinx-commerce-internal:
+    cinx-learning-service: [commerce.internal.entitlement.read]
+    cinx-recommendation-service: [commerce.internal.entitlement.read]
+    cinx-assistant-service: [commerce.internal.entitlement.read]
+  cinx-learning-internal:
+    cinx-commerce-service: [learning.internal.course.read]
+    cinx-notification-service: [learning.internal.course.read, learning.internal.enrollment.read]
+    cinx-recommendation-service: [learning.internal.course.read]
+    cinx-reporting-service: [learning.internal.enrollment.read]
+    cinx-assistant-service: [learning.internal.transcript.read, learning.internal.material.read, learning.internal.report.read]
+  cinx-reporting-internal:
+    cinx-assistant-service: [reporting.internal.overview.read]
+
+delegation:
+  onboardingSystemOnly: [LEARNER]
+  instructorWorkflowOnly: [INSTRUCTOR]
+  twoPersonApproval: [PLATFORM_ADMIN, BREAK_GLASS_ADMIN]
