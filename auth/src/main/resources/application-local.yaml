@@ -1,0 +1,58 @@
+spring:
+  config:
+    import: optional:file:../env/local.env[.properties]
+  datasource:
+    url: jdbc:mysql://localhost:${MYSQL_PORT:3300}/authdb
+    username: root
+    password: ${MYSQL_ROOT_PASSWORD:}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: true
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    baseline-version: 1
+  mail:
+    username: ${SPRING_MAIL_USERNAME:}
+    password: ${SPRING_MAIL_PASSWORD:}
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+  # registered as localhost, so a laptop that changes networks does not leave the registry on an old IP
+  instance:
+    hostname: localhost
+    prefer-ip-address: false
+security:
+  keycloak:
+    issuer-uri: http://localhost:8180/realms/cinx
+    jwk-set-uri: http://localhost:8180/realms/cinx/protocol/openid-connect/certs
+    audience: cinx-api
+keycloak:
+  base-url: http://localhost:8180
+  realm: cinx
+  admin:
+    client-id: cinx-auth-admin
+    client-secret: ${KEYCLOAK_ADMIN_CLIENT_SECRET:}
+google:
+  token-uri: https://oauth2.googleapis.com/token
+  user-info-uri: https://www.googleapis.com/oauth2/v3/userinfo
+  client-id: ${GOOGLE_CLIENT_ID:}
+  client-secret: ${GOOGLE_CLIENT_SECRET:}
+gateway.url: http://localhost:9090
+aws:
+  s3:
+    endpoint: ${AWS_S3_ENDPOINT:https://sgp1.digitaloceanspaces.com}
+    cdn-url: ${AWS_S3_CDN_URL:https://cinx.sgp1.cdn.digitaloceanspaces.com}
+    bucket: ${AWS_S3_BUCKET:cinx}
+  region: ${AWS_REGION:us-east-1}
+  credentials:
+    access-key: ${AWS_ACCESS_KEY:}
+    secret-key: ${AWS_SECRET_KEY:}
