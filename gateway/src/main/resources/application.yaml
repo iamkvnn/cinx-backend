@@ -1,0 +1,156 @@
+spring:
+  application:
+    name: gateway
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: ${REDIS_PORT:6379}
+      timeout: 500ms
+  cloud:
+    gateway:
+      server:
+        webflux:
+          routes:
+          - id: openapi-auth
+            uri: lb://auth
+            predicates:
+            - Path=/v3/api-docs/auth
+            filters:
+            - RewritePath=/v3/api-docs/auth, /v3/api-docs
+          - id: openapi-commerce
+            uri: lb://commerce
+            predicates:
+            - Path=/v3/api-docs/commerce
+            filters:
+            - RewritePath=/v3/api-docs/commerce, /v3/api-docs
+          - id: openapi-user
+            uri: lb://user
+            predicates:
+            - Path=/v3/api-docs/user
+            filters:
+            - RewritePath=/v3/api-docs/user, /v3/api-docs
+          - id: openapi-learning
+            uri: lb://learning
+            predicates:
+            - Path=/v3/api-docs/learning
+            filters:
+            - RewritePath=/v3/api-docs/learning, /v3/api-docs
+          - id: openapi-notification
+            uri: lb://notification
+            predicates:
+            - Path=/v3/api-docs/notification
+            filters:
+            - RewritePath=/v3/api-docs/notification, /v3/api-docs
+          - id: openapi-reporting
+            uri: lb://reporting
+            predicates:
+            - Path=/v3/api-docs/reporting
+            filters:
+            - RewritePath=/v3/api-docs/reporting, /v3/api-docs
+          - id: openapi-assistant
+            uri: ${assistant.base-url}
+            predicates:
+            - Path=/v3/api-docs/assistant
+            filters:
+            - RewritePath=/v3/api-docs/assistant, /openapi.json
+          - id: identity-service-v2
+            uri: lb://auth
+            predicates:
+            - Path=/api/v1/identity/**
+          - id: commerce-service-v2
+            uri: lb://commerce
+            predicates:
+            - Path=/api/v1/cart/**,/api/v1/wishlist/**,/api/v1/orders/**,/api/v1/vouchers/**,/api/v1/payments/**,/api/v1/plans/**,/api/v1/subscriptions/**,/api/v1/entitlements/**,/api/v1/billing/**,/api/v1/admin/plans/**,/api/v1/admin/subscriptions/**
+          - id: user-profile-v2
+            uri: lb://user
+            predicates:
+            - Path=/api/v1/profiles/**,/api/v1/admin/profiles/**,/api/v1/policies/**,/api/v1/instructor-applications/**,/api/v1/instructor-partnerships/**
+          - id: keycloak
+            uri: ${keycloak.base-url}
+            predicates:
+            - Path=/realms/**,/resources/**
+          - id: learning-service
+            uri: lb://learning
+            predicates:
+            - Path=/api/v1/courses/**,/api/v1/instructors/**,/api/v1/admin/courses/**,/api/v1/enrollments/**,/api/v1/learning/**,/api/v1/assessments/**,/api/v1/community/**,/api/v1/certificates/**
+          - id: notification-service
+            uri: lb://notification
+            predicates:
+            - Path=/api/v1/notifications/**
+          - id: notification-websocket
+            uri: lb:ws://notification
+            predicates:
+            - Path=/ws/**
+          - id: notification-sockjs
+            uri: lb://notification
+            predicates:
+            - Path=/sockjs/**
+          - id: recommendation-service
+            uri: ${recommendation.base-url}
+            predicates:
+            - Path=/api/v1/recommendations/**
+          - id: assistant-service
+            uri: ${assistant.base-url}
+            predicates:
+            - Path=/api/v1/assistant/**
+          - id: reporting-service
+            uri: lb://reporting
+            predicates:
+            - Path=/api/v1/reporting/**
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE}
+security:
+  keycloak:
+    issuer-uri: ${KEYCLOAK_ISSUER_URI}
+    jwk-set-uri: ${KEYCLOAK_JWK_SET_URI}
+    audience: ${KEYCLOAK_AUDIENCE}
+keycloak:
+  base-url: ${KEYCLOAK_BASE_URL}
+recommendation:
+  base-url: http://${RECOMMENDATION_HOST}:${RECOMMENDATION_PORT}
+assistant:
+  base-url: http://${ASSISTANT_HOST:assistant}:${ASSISTANT_PORT:8092}
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS}
+server:
+  port: 9090
+management:
+  health:
+    # the search limit fails open without Redis, so Redis being down must not mark the gateway down
+    redis:
+      enabled: false
+cinx:
+  rate-limit:
+    key: ${GATEWAY_RATE_LIMIT_KEY:}
+    trust-forwarded-for: ${GATEWAY_TRUST_FORWARDED_FOR:false}
+    search:
+      guest-per-minute: 30
+      user-per-minute: 120
+  security:
+    authorization-freshness:
+      auth-base-url: ${AUTH_INTERNAL_BASE_URL:http://auth:8888}
+      token-uri: ${KEYCLOAK_SERVICE_TOKEN_URI:http://keycloak:8080/realms/cinx/protocol/openid-connect/token}
+      client-id: ${SERVICE_CLIENT_ID:cinx-gateway-service}
+      client-secret: ${CINX_GATEWAY_SERVICE_CLIENT_SECRET:}
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    urls:
+    - name: Auth Service
+      url: /v3/api-docs/auth
+    - name: Commerce Service
+      url: /v3/api-docs/commerce
+    - name: User Service
+      url: /v3/api-docs/user
+    - name: Learning Service
+      url: /v3/api-docs/learning
+    - name: Notification Service
+      url: /v3/api-docs/notification
+    - name: Reporting Service
+      url: /v3/api-docs/reporting
+    - name: Assistant Service
+      url: /v3/api-docs/assistant
