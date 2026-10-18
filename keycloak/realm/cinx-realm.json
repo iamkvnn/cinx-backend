@@ -1,0 +1,598 @@
+{
+  "realm": "cinx",
+  "enabled": true,
+  "displayName": "CINX",
+  "registrationAllowed": true,
+  "registrationEmailAsUsername": true,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "verifyEmail": true,
+  "resetPasswordAllowed": true,
+  "rememberMe": true,
+  "loginTheme": "cinx",
+  "emailTheme": "cinx",
+  "internationalizationEnabled": true,
+  "supportedLocales": ["vi", "en"],
+  "defaultLocale": "vi",
+  "attributes": {
+    "acr.loa.map": "{\"urn:cinx:loa:1\":1,\"urn:cinx:loa:2\":2}"
+  },
+  "authenticationFlows": [
+    {
+      "id": "5f0c2b1e-8a4d-4c7e-9b2a-3d6e1f7a9c01",
+      "alias": "admin-step-up",
+      "description": "cinx-admin sign-in: the session cookie, else password (LoA 1) then OTP (LoA 2)",
+      "providerId": "basic-flow",
+      "topLevel": true,
+      "builtIn": false,
+      "authenticationExecutions": [
+        { "authenticator": "auth-cookie", "authenticatorFlow": false, "requirement": "ALTERNATIVE", "priority": 10, "userSetupAllowed": false },
+        { "flowAlias": "admin-step-up-forms", "authenticatorFlow": true, "requirement": "ALTERNATIVE", "priority": 20, "userSetupAllowed": false }
+      ]
+    },
+    {
+      "alias": "admin-step-up-forms",
+      "description": "The levels, lowest first",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        { "flowAlias": "admin-loa1", "authenticatorFlow": true, "requirement": "CONDITIONAL", "priority": 10, "userSetupAllowed": false },
+        { "flowAlias": "admin-loa2", "authenticatorFlow": true, "requirement": "CONDITIONAL", "priority": 20, "userSetupAllowed": false }
+      ]
+    },
+    {
+      "alias": "admin-loa1",
+      "description": "LoA 1: password",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        { "authenticator": "conditional-level-of-authentication", "authenticatorConfig": "admin-loa1-condition", "authenticatorFlow": false, "requirement": "REQUIRED", "priority": 10, "userSetupAllowed": false },
+        { "authenticator": "auth-username-password-form", "authenticatorConfig": "admin-pwd-amr", "authenticatorFlow": false, "requirement": "REQUIRED", "priority": 20, "userSetupAllowed": false }
+      ]
+    },
+    {
+      "alias": "admin-loa2",
+      "description": "LoA 2: OTP, asked on every request for this level (max age 0)",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        { "authenticator": "conditional-level-of-authentication", "authenticatorConfig": "admin-loa2-condition", "authenticatorFlow": false, "requirement": "REQUIRED", "priority": 10, "userSetupAllowed": false },
+        { "authenticator": "auth-otp-form", "authenticatorConfig": "admin-otp-amr", "authenticatorFlow": false, "requirement": "REQUIRED", "priority": 20, "userSetupAllowed": false }
+      ]
+    }
+  ],
+  "authenticatorConfig": [
+    { "alias": "admin-loa1-condition", "config": { "loa-condition-level": "1", "loa-max-age": "36000" } },
+    { "alias": "admin-loa2-condition", "config": { "loa-condition-level": "2", "loa-max-age": "0" } },
+    { "alias": "admin-pwd-amr", "config": { "default.reference.value": "pwd", "default.reference.maxAge": "36000" } },
+    { "alias": "admin-otp-amr", "config": { "default.reference.value": "otp", "default.reference.maxAge": "900" } }
+  ],
+  "accessTokenLifespan": 300,
+  "otpPolicyType": "totp",
+  "otpPolicyAlgorithm": "HmacSHA256",
+  "otpPolicyDigits": 6,
+  "otpPolicyPeriod": 30,
+  "webAuthnPolicyRpEntityName": "CINX",
+  "webAuthnPolicySignatureAlgorithms": ["ES256", "RS256"],
+  "components": {
+    "org.keycloak.userprofile.UserProfileProvider": [
+      {
+        "providerId": "declarative-user-profile",
+        "subComponents": {},
+        "config": {
+          "kc.user.profile.config": [
+            "{\"attributes\":[{\"name\":\"username\",\"displayName\":\"${username}\",\"validations\":{\"length\":{\"min\":3,\"max\":255},\"username-prohibited-characters\":{},\"up-username-not-idn-homograph\":{}},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]},\"multivalued\":false},{\"name\":\"email\",\"displayName\":\"${email}\",\"validations\":{\"email\":{},\"length\":{\"max\":255}},\"required\":{\"roles\":[\"user\"]},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]},\"multivalued\":false},{\"name\":\"firstName\",\"displayName\":\"${firstName}\",\"validations\":{\"length\":{\"max\":255},\"person-name-prohibited-characters\":{}},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]},\"multivalued\":false},{\"name\":\"lastName\",\"displayName\":\"${lastName}\",\"validations\":{\"length\":{\"max\":255},\"person-name-prohibited-characters\":{}},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]},\"multivalued\":false},{\"name\":\"uid\",\"displayName\":\"CINX user ID\",\"multivalued\":false,\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\"]},\"validations\":{\"length\":{\"min\":1,\"max\":255}}}],\"unmanagedAttributePolicy\":\"ADMIN_EDIT\"}"
+          ]
+        }
+      }
+    ]
+  },
+  "roles": {
+    "realm": [
+      { "name": "LEARNER", "composite": true, "composites": { "client": { "cinx-api": ["user.profile.read.self", "user.profile.update.self", "user.instructor.apply.self", "commerce.cart.manage.self", "commerce.wishlist.manage.self", "commerce.order.create.self", "commerce.order.read.self", "commerce.subscription.read.self", "commerce.subscription.change.self", "learning.progress.read.self", "learning.progress.write.self", "recommendation.agent.use", "recommendation.session.read.self", "recommendation.session.write.self", "assistant.agent.use.learner", "assistant.action.approve.self", "notification.read.self", "notification.update.self"] } } },
+      { "name": "INSTRUCTOR", "composite": true, "composites": { "client": { "cinx-api": ["learning.course.create", "learning.course.update.own", "learning.curriculum.update.own", "learning.progress.read.own-course", "learning.submission.grade.own", "learning.analytics.read.own", "assistant.agent.use.instructor", "assistant.action.approve.self"] } } },
+      { "name": "INSTRUCTOR_OPERATIONS", "composite": true, "composites": { "client": { "cinx-api": ["user.instructor.review.any"] } } },
+      { "name": "CONTENT_REVIEWER", "composite": true, "composites": { "client": { "cinx-api": ["learning.course.review.any", "learning.course.publish.any", "assistant.agent.use.admin"] } } },
+      { "name": "CATALOG_MANAGER", "composite": true, "composites": { "client": { "cinx-api": ["commerce.plan.manage.any", "learning.course.subscription-policy.manage.any", "learning.featured.manage.any"] } } },
+      { "name": "COMMUNITY_MODERATOR", "composite": true, "composites": { "client": { "cinx-api": ["learning.community.moderate.any", "assistant.agent.use.admin"] } } },
+      { "name": "POLICY_MANAGER", "composite": true, "composites": { "client": { "cinx-api": ["user.policy.manage.any", "user.policy.publish.any"] } } },
+      { "name": "PROMOTION_MANAGER", "composite": true, "composites": { "client": { "cinx-api": ["commerce.voucher.manage.any"] } } },
+      { "name": "SUPPORT_AGENT", "composite": true, "composites": { "client": { "cinx-api": ["auth.account.read.any", "user.profile.read.any", "commerce.order.read.any", "recommendation.user.read.any"] } } },
+      { "name": "IDENTITY_ADMIN", "composite": true, "composites": { "client": { "cinx-api": ["auth.account.read.any", "auth.account.suspend.any", "auth.account.reactivate.any", "auth.role.assign.any"] } } },
+      { "name": "FINANCE_OPERATOR", "composite": true, "composites": { "client": { "cinx-api": ["commerce.order.read.any", "commerce.subscription.adjust.any", "commerce.payment.reconcile.any", "commerce.refund.manage.any", "reporting.finance.read"] } } },
+      { "name": "REPORT_ANALYST", "composite": true, "composites": { "client": { "cinx-api": ["learning.analytics.read.any", "reporting.dashboard.read", "reporting.experiment.manage.any", "assistant.agent.use.admin"] } } },
+      { "name": "NOTIFICATION_OPERATOR", "composite": true, "composites": { "client": { "cinx-api": ["notification.broadcast.send.any"] } } },
+      { "name": "AI_OPERATOR", "composite": true, "composites": { "client": { "cinx-api": ["recommendation.user.read.any", "recommendation.agent.debug", "assistant.agent.use.admin", "assistant.capability.manage.any"] } } },
+      { "name": "PLATFORM_ADMIN", "composite": true, "composites": { "realm": ["INSTRUCTOR_OPERATIONS", "CONTENT_REVIEWER", "CATALOG_MANAGER", "COMMUNITY_MODERATOR", "POLICY_MANAGER", "PROMOTION_MANAGER", "SUPPORT_AGENT", "IDENTITY_ADMIN", "FINANCE_OPERATOR", "REPORT_ANALYST", "NOTIFICATION_OPERATOR", "AI_OPERATOR"] } },
+      { "name": "BREAK_GLASS_ADMIN", "composite": true, "composites": { "realm": ["PLATFORM_ADMIN"], "client": { "cinx-api": ["user.profile.update.any", "learning.course.update.any"] } } }
+    ],
+    "client": {
+      "cinx-api": [
+        {"name":"auth.account.read.any"},{"name":"auth.account.suspend.any"},{"name":"auth.account.reactivate.any"},{"name":"auth.role.assign.any"},
+        {"name":"user.profile.read.self"},{"name":"user.profile.read.any"},{"name":"user.profile.update.self"},{"name":"user.profile.update.any"},{"name":"user.instructor.apply.self"},{"name":"user.instructor.review.any"},{"name":"user.policy.manage.any"},{"name":"user.policy.publish.any"},
+        {"name":"commerce.cart.manage.self"},{"name":"commerce.wishlist.manage.self"},{"name":"commerce.order.create.self"},{"name":"commerce.order.read.self"},{"name":"commerce.order.read.any"},{"name":"commerce.voucher.manage.any"},{"name":"commerce.plan.manage.any"},{"name":"commerce.subscription.read.self"},{"name":"commerce.subscription.change.self"},{"name":"commerce.subscription.adjust.any"},{"name":"commerce.payment.reconcile.any"},{"name":"commerce.refund.manage.any"},
+        {"name":"learning.course.create"},{"name":"learning.course.update.own"},{"name":"learning.course.update.any"},{"name":"learning.curriculum.update.own"},{"name":"learning.course.review.any"},{"name":"learning.course.publish.any"},{"name":"learning.course.subscription-policy.manage.any"},{"name":"learning.featured.manage.any"},{"name":"learning.progress.read.self"},{"name":"learning.progress.write.self"},{"name":"learning.progress.read.own-course"},{"name":"learning.submission.grade.own"},{"name":"learning.community.moderate.any"},{"name":"learning.analytics.read.own"},{"name":"learning.analytics.read.any"},
+        {"name":"recommendation.agent.use"},{"name":"recommendation.session.read.self"},{"name":"recommendation.session.write.self"},{"name":"recommendation.user.read.any"},{"name":"recommendation.agent.debug"},
+        {"name":"assistant.agent.use.learner"},{"name":"assistant.agent.use.instructor"},{"name":"assistant.agent.use.admin"},{"name":"assistant.action.approve.self"},{"name":"assistant.capability.manage.any"},
+        {"name":"notification.read.self"},{"name":"notification.update.self"},{"name":"notification.test.send.any"},{"name":"notification.broadcast.send.any"},
+        {"name":"reporting.dashboard.read"},{"name":"reporting.finance.read"},{"name":"reporting.experiment.manage.any"}
+      ],
+      "cinx-auth-internal": [
+        {"name":"auth.internal.permission-members.read"},
+        {"name":"auth.internal.authorization-state.read"}
+      ],
+      "cinx-user-internal": [
+        {"name":"user.internal.profile.read"}
+      ],
+      "cinx-commerce-internal": [
+        {"name":"commerce.internal.entitlement.read"}
+      ],
+      "cinx-learning-internal": [
+        {"name":"learning.internal.course.read"},
+        {"name":"learning.internal.enrollment.read"},
+        {"name":"learning.internal.transcript.read"},
+        {"name":"learning.internal.material.read"},
+        {"name":"learning.internal.report.read"}
+      ],
+      "cinx-reporting-internal": [
+        {"name":"reporting.internal.overview.read"}
+      ],
+      "cinx-assistant-internal": [
+        {"name":"assistant.internal.reminder.write"}
+      ]
+    }
+  },
+  "defaultRoles": [
+    "default-roles-cinx",
+    "LEARNER"
+  ],
+  "clients": [
+    {
+      "clientId": "cinx-api",
+      "name": "CINX User API",
+      "enabled": true,
+      "bearerOnly": true,
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "fullScopeAllowed": false
+    },
+    {
+      "clientId": "cinx-web",
+      "name": "CINX Web",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "http://localhost:5173/auth/callback",
+        "http://localhost:5174/auth/callback"
+      ],
+      "webOrigins": [
+        "http://localhost:5173",
+        "http://localhost:5174"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:5173/##http://localhost:5174/"
+      },
+      "protocolMappers": [
+        {
+          "name": "cinx-user-id",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "uid",
+            "user.attribute": "uid",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "cinx-realm-roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "roles",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "id.token.claim": "true",
+            "access.token.claim": "true"
+          }
+        },
+        {
+          "name": "cinx-api-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "cinx-api",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        },
+        {
+          "name": "cinx-permissions",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-client-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "usermodel.clientRoleMapping.clientId": "cinx-api",
+            "claim.name": "permissions",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        },
+        {
+          "name": "cinx-token-kind",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-hardcoded-claim-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "token_kind",
+            "claim.value": "user",
+            "jsonType.label": "String",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        },
+        {
+          "name": "cinx-authorization-version",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "authz_ver",
+            "user.attribute": "authorization_version",
+            "jsonType.label": "long",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        },
+        {
+          "name": "cinx-authorization-policy-version",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "authz_policy_ver",
+            "user.attribute": "authorization_policy_version",
+            "jsonType.label": "long",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        },
+        {
+          "name": "cinx-authorization-not-after",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "authz_not_after",
+            "user.attribute": "authz_not_after",
+            "jsonType.label": "long",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        },
+        {
+          "name": "cinx-assistant-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": { "included.custom.audience": "cinx-assistant", "id.token.claim": "false", "access.token.claim": "true" }
+        }
+      ]
+    },
+    {
+      "clientId": "cinx-admin",
+      "name": "CINX Admin",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["http://localhost:5173/auth/callback"],
+      "webOrigins": ["http://localhost:5173"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:5173/",
+        "minimum.acr.value": "urn:cinx:loa:2"
+      },
+      "authenticationFlowBindingOverrides": { "browser": "5f0c2b1e-8a4d-4c7e-9b2a-3d6e1f7a9c01" },
+      "protocolMappers": [
+        { "name": "cinx-user-id", "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-attribute-mapper", "consentRequired": false, "config": { "claim.name": "uid", "user.attribute": "uid", "jsonType.label": "String", "id.token.claim": "true", "access.token.claim": "true", "userinfo.token.claim": "true" } },
+        { "name": "cinx-realm-roles", "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-realm-role-mapper", "consentRequired": false, "config": { "claim.name": "roles", "jsonType.label": "String", "multivalued": "true", "id.token.claim": "true", "access.token.claim": "true" } },
+        { "name": "cinx-api-audience", "protocol": "openid-connect", "protocolMapper": "oidc-audience-mapper", "consentRequired": false, "config": { "included.custom.audience": "cinx-api", "id.token.claim": "false", "access.token.claim": "true" } },
+        { "name": "cinx-permissions", "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-client-role-mapper", "consentRequired": false, "config": { "usermodel.clientRoleMapping.clientId": "cinx-api", "claim.name": "permissions", "jsonType.label": "String", "multivalued": "true", "id.token.claim": "false", "access.token.claim": "true" } },
+        { "name": "cinx-token-kind", "protocol": "openid-connect", "protocolMapper": "oidc-hardcoded-claim-mapper", "consentRequired": false, "config": { "claim.name": "token_kind", "claim.value": "user", "jsonType.label": "String", "id.token.claim": "false", "access.token.claim": "true" } },
+        { "name": "cinx-authorization-version", "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-attribute-mapper", "consentRequired": false, "config": { "claim.name": "authz_ver", "user.attribute": "authorization_version", "jsonType.label": "long", "id.token.claim": "false", "access.token.claim": "true" } },
+        { "name": "cinx-authorization-policy-version", "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-attribute-mapper", "consentRequired": false, "config": { "claim.name": "authz_policy_ver", "user.attribute": "authorization_policy_version", "jsonType.label": "long", "id.token.claim": "false", "access.token.claim": "true" } },
+        { "name": "cinx-authorization-not-after", "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-attribute-mapper", "consentRequired": false, "config": { "claim.name": "authz_not_after", "user.attribute": "authz_not_after", "jsonType.label": "long", "id.token.claim": "false", "access.token.claim": "true" } },
+        { "name": "cinx-assistant-audience", "protocol": "openid-connect", "protocolMapper": "oidc-audience-mapper", "consentRequired": false, "config": { "included.custom.audience": "cinx-assistant", "id.token.claim": "false", "access.token.claim": "true" } },
+        { "name": "cinx-amr", "protocol": "openid-connect", "protocolMapper": "oidc-amr-mapper", "consentRequired": false, "config": { "access.token.claim": "true", "id.token.claim": "true", "introspection.token.claim": "true" } }
+      ]
+    },
+    {
+      "clientId": "cinx-assistant",
+      "name": "CINX Assistant (token exchange)",
+      "enabled": true,
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "secret": "${CINX_ASSISTANT_CLIENT_SECRET}",
+      "attributes": { "standard.token.exchange.enabled": "true" },
+      "protocolMappers": [
+        {"name":"cinx-user-id","protocol":"openid-connect","protocolMapper":"oidc-usermodel-attribute-mapper","consentRequired":false,"config":{"claim.name":"uid","user.attribute":"uid","jsonType.label":"String","id.token.claim":"false","access.token.claim":"true"}},
+        {"name":"cinx-realm-roles","protocol":"openid-connect","protocolMapper":"oidc-usermodel-realm-role-mapper","consentRequired":false,"config":{"claim.name":"roles","jsonType.label":"String","multivalued":"true","id.token.claim":"false","access.token.claim":"true"}},
+        {"name":"cinx-api-audience","protocol":"openid-connect","protocolMapper":"oidc-audience-mapper","consentRequired":false,"config":{"included.custom.audience":"cinx-api","id.token.claim":"false","access.token.claim":"true"}},
+        {"name":"cinx-permissions","protocol":"openid-connect","protocolMapper":"oidc-usermodel-client-role-mapper","consentRequired":false,"config":{"usermodel.clientRoleMapping.clientId":"cinx-api","claim.name":"permissions","jsonType.label":"String","multivalued":"true","id.token.claim":"false","access.token.claim":"true"}},
+        {"name":"cinx-token-kind","protocol":"openid-connect","protocolMapper":"oidc-hardcoded-claim-mapper","consentRequired":false,"config":{"claim.name":"token_kind","claim.value":"user","jsonType.label":"String","id.token.claim":"false","access.token.claim":"true"}},
+        {"name":"cinx-authorization-version","protocol":"openid-connect","protocolMapper":"oidc-usermodel-attribute-mapper","consentRequired":false,"config":{"claim.name":"authz_ver","user.attribute":"authorization_version","jsonType.label":"long","id.token.claim":"false","access.token.claim":"true"}},
+        {"name":"cinx-authorization-policy-version","protocol":"openid-connect","protocolMapper":"oidc-usermodel-attribute-mapper","consentRequired":false,"config":{"claim.name":"authz_policy_ver","user.attribute":"authorization_policy_version","jsonType.label":"long","id.token.claim":"false","access.token.claim":"true"}},
+        {"name":"cinx-authorization-not-after","protocol":"openid-connect","protocolMapper":"oidc-usermodel-attribute-mapper","consentRequired":false,"config":{"claim.name":"authz_not_after","user.attribute":"authz_not_after","jsonType.label":"long","id.token.claim":"false","access.token.claim":"true"}}
+      ]
+    },
+    {
+      "clientId": "cinx-auth-admin",
+      "name": "CINX Auth Adapter",
+      "enabled": true,
+      "publicClient": false,
+      "bearerOnly": false,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "secret": "${KEYCLOAK_ADMIN_CLIENT_SECRET}"
+    },
+    {
+      "clientId": "cinx-auth-internal",
+      "name": "CINX Auth Internal API",
+      "enabled": true,
+      "bearerOnly": true,
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false
+    },
+    {
+      "clientId": "cinx-user-internal",
+      "name": "CINX User Internal API",
+      "enabled": true,
+      "bearerOnly": true,
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false
+    },
+    {
+      "clientId": "cinx-commerce-internal",
+      "name": "CINX Commerce Internal API",
+      "enabled": true,
+      "bearerOnly": true,
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false
+    },
+    {
+      "clientId": "cinx-reporting-internal",
+      "name": "CINX Reporting Internal API",
+      "enabled": true,
+      "bearerOnly": true,
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false
+    },
+    {
+      "clientId": "cinx-assistant-internal",
+      "name": "CINX Assistant Internal API",
+      "enabled": true,
+      "bearerOnly": true,
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false
+    },
+    {
+      "clientId": "cinx-learning-internal",
+      "name": "CINX Learning Internal API",
+      "enabled": true,
+      "bearerOnly": true,
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false
+    },
+    {
+      "clientId": "cinx-gateway-service",
+      "enabled": true,
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "secret": "${CINX_GATEWAY_SERVICE_CLIENT_SECRET}",
+      "protocolMappers": [
+        {"name":"service-token-kind","protocol":"openid-connect","protocolMapper":"oidc-hardcoded-claim-mapper","consentRequired":false,"config":{"claim.name":"token_kind","claim.value":"service","jsonType.label":"String","access.token.claim":"true","id.token.claim":"false"}},
+        {"name":"auth-internal-audience","protocol":"openid-connect","protocolMapper":"oidc-audience-mapper","consentRequired":false,"config":{"included.custom.audience":"cinx-auth-internal","access.token.claim":"true","id.token.claim":"false"}},
+        {"name":"auth-internal-permissions","protocol":"openid-connect","protocolMapper":"oidc-usermodel-client-role-mapper","consentRequired":false,"config":{"usermodel.clientRoleMapping.clientId":"cinx-auth-internal","claim.name":"permissions","jsonType.label":"String","multivalued":"true","access.token.claim":"true","id.token.claim":"false"}}
+      ]
+    },
+    {
+      "clientId": "cinx-notification-service",
+      "enabled": true,
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "secret": "${CINX_NOTIFICATION_SERVICE_CLIENT_SECRET}",
+      "protocolMappers": [
+        {"name":"learning-internal-audience","protocol":"openid-connect","protocolMapper":"oidc-audience-mapper","consentRequired":false,"config":{"included.custom.audience":"cinx-learning-internal","access.token.claim":"true","id.token.claim":"false"}},
+        {"name":"learning-internal-permissions","protocol":"openid-connect","protocolMapper":"oidc-usermodel-client-role-mapper","consentRequired":false,"config":{"usermodel.clientRoleMapping.clientId":"cinx-learning-internal","claim.name":"permissions","jsonType.label":"String","multivalued":"true","access.token.claim":"true","id.token.claim":"false"}},
+        {"name":"service-token-kind","protocol":"openid-connect","protocolMapper":"oidc-hardcoded-claim-mapper","consentRequired":false,"config":{"claim.name":"token_kind","claim.value":"service","jsonType.label":"String","access.token.claim":"true","id.token.claim":"false"}},
+        {"name":"auth-internal-audience","protocol":"openid-connect","protocolMapper":"oidc-audience-mapper","consentRequired":false,"config":{"included.custom.audience":"cinx-auth-internal","access.token.claim":"true","id.token.claim":"false"}},
+        {"name":"user-internal-audience","protocol":"openid-connect","protocolMapper":"oidc-audience-mapper","consentRequired":false,"config":{"included.custom.audience":"cinx-user-internal","access.token.claim":"true","id.token.claim":"false"}},
+        {"name":"auth-internal-permissions","protocol":"openid-connect","protocolMapper":"oidc-usermodel-client-role-mapper","consentRequired":false,"config":{"usermodel.clientRoleMapping.clientId":"cinx-auth-internal","claim.name":"permissions","jsonType.label":"String","multivalued":"true","access.token.claim":"true","id.token.claim":"false"}},
+        {"name":"user-internal-permissions","protocol":"openid-connect","protocolMapper":"oidc-usermodel-client-role-mapper","consentRequired":false,"config":{"usermodel.clientRoleMapping.clientId":"cinx-user-internal","claim.name":"permissions","jsonType.label":"String","multivalued":"true","access.token.claim":"true","id.token.claim":"false"}}
+      ]
+    },
+    {
+      "clientId":"cinx-user-service","enabled":true,"publicClient":false,"standardFlowEnabled":false,"directAccessGrantsEnabled":false,"serviceAccountsEnabled":true,"secret":"${CINX_USER_SERVICE_CLIENT_SECRET}",
+      "protocolMappers":[
+        {"name":"service-token-kind","protocol":"openid-connect","protocolMapper":"oidc-hardcoded-claim-mapper","consentRequired":false,"config":{"claim.name":"token_kind","claim.value":"service","jsonType.label":"String","access.token.claim":"true","id.token.claim":"false"}},
+        {"name":"auth-internal-audience","protocol":"openid-connect","protocolMapper":"oidc-audience-mapper","consentRequired":false,"config":{"included.custom.audience":"cinx-auth-internal","access.token.claim":"true","id.token.claim":"false"}},
+        {"name":"auth-internal-permissions","protocol":"openid-connect","protocolMapper":"oidc-usermodel-client-role-mapper","consentRequired":false,"config":{"usermodel.clientRoleMapping.clientId":"cinx-auth-internal","claim.name":"permissions","jsonType.label":"String","multivalued":"true","access.token.claim":"true","id.token.claim":"false"}}
+      ]
+    },
+    {
+      "clientId":"cinx-commerce-service","enabled":true,"publicClient":false,"standardFlowEnabled":false,"directAccessGrantsEnabled":false,"serviceAccountsEnabled":true,"secret":"${CINX_COMMERCE_SERVICE_CLIENT_SECRET}",
+      "protocolMappers":[
+        {"name":"learning-internal-audience","protocol":"openid-connect","protocolMapper":"oidc-audience-mapper","consentRequired":false,"config":{"included.custom.audience":"cinx-learning-internal","access.token.claim":"true","id.token.claim":"false"}},
+        {"name":"learning-internal-permissions","protocol":"openid-connect","protocolMapper":"oidc-usermodel-client-role-mapper","consentRequired":false,"config":{"usermodel.clientRoleMapping.clientId":"cinx-learning-internal","claim.name":"permissions","jsonType.label":"String","multivalued":"true","access.token.claim":"true","id.token.claim":"false"}},
+        {"name":"service-token-kind","protocol":"openid-connect","protocolMapper":"oidc-hardcoded-claim-mapper","consentRequired":false,"config":{"claim.name":"token_kind","claim.value":"service","jsonType.label":"String","access.token.claim":"true","id.token.claim":"false"}},
+        {"name":"auth-internal-audience","protocol":"openid-connect","protocolMapper":"oidc-audience-mapper","consentRequired":false,"config":{"included.custom.audience":"cinx-auth-internal","access.token.claim":"true","id.token.claim":"false"}},
+        {"name":"auth-internal-permissions","protocol":"openid-connect","protocolMapper":"oidc-usermodel-client-role-mapper","consentRequired":false,"config":{"usermodel.clientRoleMapping.clientId":"cinx-auth-internal","claim.name":"permissions","jsonType.label":"String","multivalued":"true","access.token.claim":"true","id.token.claim":"false"}}
+      ]
+    },
+    {
+      "clientId":"cinx-learning-service","enabled":true,"publicClient":false,"standardFlowEnabled":false,"directAccessGrantsEnabled":false,"serviceAccountsEnabled":true,"secret":"${CINX_LEARNING_SERVICE_CLIENT_SECRET}",
+      "protocolMappers":[
+        {"name":"assistant-internal-audience","protocol":"openid-connect","protocolMapper":"oidc-audience-mapper","consentRequired":false,"config":{"included.custom.audience":"cinx-assistant-internal","access.token.claim":"true","id.token.claim":"false"}},
+        {"name":"assistant-internal-permissions","protocol":"openid-connect","protocolMapper":"oidc-usermodel-client-role-mapper","consentRequired":false,"config":{"usermodel.clientRoleMapping.clientId":"cinx-assistant-internal","claim.name":"permissions","jsonType.label":"String","multivalued":"true","access.token.claim":"true","id.token.claim":"false"}},
+        {"name":"commerce-internal-audience","protocol":"openid-connect","protocolMapper":"oidc-audience-mapper","consentRequired":false,"config":{"included.custom.audience":"cinx-commerce-internal","access.token.claim":"true","id.token.claim":"false"}},
+        {"name":"commerce-internal-permissions","protocol":"openid-connect","protocolMapper":"oidc-usermodel-client-role-mapper","consentRequired":false,"config":{"usermodel.clientRoleMapping.clientId":"cinx-commerce-internal","claim.name":"permissions","jsonType.label":"String","multivalued":"true","access.token.claim":"true","id.token.claim":"false"}},
+        {"name":"service-token-kind","protocol":"openid-connect","protocolMapper":"oidc-hardcoded-claim-mapper","consentRequired":false,"config":{"claim.name":"token_kind","claim.value":"service","jsonType.label":"String","access.token.claim":"true","id.token.claim":"false"}},
+        {"name":"auth-internal-audience","protocol":"openid-connect","protocolMapper":"oidc-audience-mapper","consentRequired":false,"config":{"included.custom.audience":"cinx-auth-internal","access.token.claim":"true","id.token.claim":"false"}},
+        {"name":"user-internal-audience","protocol":"openid-connect","protocolMapper":"oidc-audience-mapper","consentRequired":false,"config":{"included.custom.audience":"cinx-user-internal","access.token.claim":"true","id.token.claim":"false"}},
+        {"name":"auth-internal-permissions","protocol":"openid-connect","protocolMapper":"oidc-usermodel-client-role-mapper","consentRequired":false,"config":{"usermodel.clientRoleMapping.clientId":"cinx-auth-internal","claim.name":"permissions","jsonType.label":"String","multivalued":"true","access.token.claim":"true","id.token.claim":"false"}},
+        {"name":"user-internal-permissions","protocol":"openid-connect","protocolMapper":"oidc-usermodel-client-role-mapper","consentRequired":false,"config":{"usermodel.clientRoleMapping.clientId":"cinx-user-internal","claim.name":"permissions","jsonType.label":"String","multivalued":"true","access.token.claim":"true","id.token.claim":"false"}}
+      ]
+    },
+    {
+      "clientId":"cinx-reporting-service","enabled":true,"publicClient":false,"standardFlowEnabled":false,"directAccessGrantsEnabled":false,"serviceAccountsEnabled":true,"secret":"${CINX_REPORTING_SERVICE_CLIENT_SECRET}",
+      "protocolMappers":[
+        {"name":"learning-internal-audience","protocol":"openid-connect","protocolMapper":"oidc-audience-mapper","consentRequired":false,"config":{"included.custom.audience":"cinx-learning-internal","access.token.claim":"true","id.token.claim":"false"}},
+        {"name":"learning-internal-permissions","protocol":"openid-connect","protocolMapper":"oidc-usermodel-client-role-mapper","consentRequired":false,"config":{"usermodel.clientRoleMapping.clientId":"cinx-learning-internal","claim.name":"permissions","jsonType.label":"String","multivalued":"true","access.token.claim":"true","id.token.claim":"false"}},
+        {"name":"service-token-kind","protocol":"openid-connect","protocolMapper":"oidc-hardcoded-claim-mapper","consentRequired":false,"config":{"claim.name":"token_kind","claim.value":"service","jsonType.label":"String","access.token.claim":"true","id.token.claim":"false"}},
+        {"name":"auth-internal-audience","protocol":"openid-connect","protocolMapper":"oidc-audience-mapper","consentRequired":false,"config":{"included.custom.audience":"cinx-auth-internal","access.token.claim":"true","id.token.claim":"false"}},
+        {"name":"auth-internal-permissions","protocol":"openid-connect","protocolMapper":"oidc-usermodel-client-role-mapper","consentRequired":false,"config":{"usermodel.clientRoleMapping.clientId":"cinx-auth-internal","claim.name":"permissions","jsonType.label":"String","multivalued":"true","access.token.claim":"true","id.token.claim":"false"}}
+      ]
+    },
+    {
+      "clientId":"cinx-recommendation-service","enabled":true,"publicClient":false,"standardFlowEnabled":false,"directAccessGrantsEnabled":false,"serviceAccountsEnabled":true,"secret":"${CINX_RECOMMENDATION_SERVICE_CLIENT_SECRET}",
+      "protocolMappers":[
+        {"name":"commerce-internal-audience","protocol":"openid-connect","protocolMapper":"oidc-audience-mapper","consentRequired":false,"config":{"included.custom.audience":"cinx-commerce-internal","access.token.claim":"true","id.token.claim":"false"}},
+        {"name":"learning-internal-audience","protocol":"openid-connect","protocolMapper":"oidc-audience-mapper","consentRequired":false,"config":{"included.custom.audience":"cinx-learning-internal","access.token.claim":"true","id.token.claim":"false"}},
+        {"name":"commerce-internal-permissions","protocol":"openid-connect","protocolMapper":"oidc-usermodel-client-role-mapper","consentRequired":false,"config":{"usermodel.clientRoleMapping.clientId":"cinx-commerce-internal","claim.name":"permissions","jsonType.label":"String","multivalued":"true","access.token.claim":"true","id.token.claim":"false"}},
+        {"name":"learning-internal-permissions","protocol":"openid-connect","protocolMapper":"oidc-usermodel-client-role-mapper","consentRequired":false,"config":{"usermodel.clientRoleMapping.clientId":"cinx-learning-internal","claim.name":"permissions","jsonType.label":"String","multivalued":"true","access.token.claim":"true","id.token.claim":"false"}},
+        {"name":"service-token-kind","protocol":"openid-connect","protocolMapper":"oidc-hardcoded-claim-mapper","consentRequired":false,"config":{"claim.name":"token_kind","claim.value":"service","jsonType.label":"String","access.token.claim":"true","id.token.claim":"false"}},
+        {"name":"auth-internal-audience","protocol":"openid-connect","protocolMapper":"oidc-audience-mapper","consentRequired":false,"config":{"included.custom.audience":"cinx-auth-internal","access.token.claim":"true","id.token.claim":"false"}},
+        {"name":"auth-internal-permissions","protocol":"openid-connect","protocolMapper":"oidc-usermodel-client-role-mapper","consentRequired":false,"config":{"usermodel.clientRoleMapping.clientId":"cinx-auth-internal","claim.name":"permissions","jsonType.label":"String","multivalued":"true","access.token.claim":"true","id.token.claim":"false"}}
+      ]
+    },
+    {
+      "clientId":"cinx-assistant-service","enabled":true,"publicClient":false,"standardFlowEnabled":false,"directAccessGrantsEnabled":false,"serviceAccountsEnabled":true,"secret":"${CINX_ASSISTANT_SERVICE_CLIENT_SECRET}",
+      "protocolMappers":[
+        {"name":"service-token-kind","protocol":"openid-connect","protocolMapper":"oidc-hardcoded-claim-mapper","consentRequired":false,"config":{"claim.name":"token_kind","claim.value":"service","jsonType.label":"String","access.token.claim":"true","id.token.claim":"false"}},
+        {"name":"auth-internal-audience","protocol":"openid-connect","protocolMapper":"oidc-audience-mapper","consentRequired":false,"config":{"included.custom.audience":"cinx-auth-internal","access.token.claim":"true","id.token.claim":"false"}},
+        {"name":"auth-internal-permissions","protocol":"openid-connect","protocolMapper":"oidc-usermodel-client-role-mapper","consentRequired":false,"config":{"usermodel.clientRoleMapping.clientId":"cinx-auth-internal","claim.name":"permissions","jsonType.label":"String","multivalued":"true","access.token.claim":"true","id.token.claim":"false"}},
+        {"name":"learning-internal-audience","protocol":"openid-connect","protocolMapper":"oidc-audience-mapper","consentRequired":false,"config":{"included.custom.audience":"cinx-learning-internal","access.token.claim":"true","id.token.claim":"false"}},
+        {"name":"learning-internal-permissions","protocol":"openid-connect","protocolMapper":"oidc-usermodel-client-role-mapper","consentRequired":false,"config":{"usermodel.clientRoleMapping.clientId":"cinx-learning-internal","claim.name":"permissions","jsonType.label":"String","multivalued":"true","access.token.claim":"true","id.token.claim":"false"}},
+        {"name":"reporting-internal-audience","protocol":"openid-connect","protocolMapper":"oidc-audience-mapper","consentRequired":false,"config":{"included.custom.audience":"cinx-reporting-internal","access.token.claim":"true","id.token.claim":"false"}},
+        {"name":"reporting-internal-permissions","protocol":"openid-connect","protocolMapper":"oidc-usermodel-client-role-mapper","consentRequired":false,"config":{"usermodel.clientRoleMapping.clientId":"cinx-reporting-internal","claim.name":"permissions","jsonType.label":"String","multivalued":"true","access.token.claim":"true","id.token.claim":"false"}},
+        {"name":"commerce-internal-audience","protocol":"openid-connect","protocolMapper":"oidc-audience-mapper","consentRequired":false,"config":{"included.custom.audience":"cinx-commerce-internal","access.token.claim":"true","id.token.claim":"false"}},
+        {"name":"commerce-internal-permissions","protocol":"openid-connect","protocolMapper":"oidc-usermodel-client-role-mapper","consentRequired":false,"config":{"usermodel.clientRoleMapping.clientId":"cinx-commerce-internal","claim.name":"permissions","jsonType.label":"String","multivalued":"true","access.token.claim":"true","id.token.claim":"false"}}
+      ]
+    }
+  ],
+  "identityProviders": [
+    {
+      "alias": "google",
+      "providerId": "google",
+      "enabled": true,
+      "trustEmail": false,
+      "storeToken": false,
+      "linkOnly": false,
+      "firstBrokerLoginFlowAlias": "first broker login",
+      "config": {
+        "clientId": "${GOOGLE_CLIENT_ID}",
+        "clientSecret": "${GOOGLE_CLIENT_SECRET}",
+        "defaultScope": "openid profile email",
+        "syncMode": "FORCE",
+        "useJwksUrl": "true"
+      }
+    }
+  ],
+  "users": [
+    {
+      "username": "service-account-cinx-auth-admin",
+      "enabled": true,
+      "serviceAccountClientId": "cinx-auth-admin",
+      "clientRoles": {
+        "realm-management": [
+          "manage-users",
+          "view-users",
+          "query-users",
+          "view-realm"
+        ]
+      }
+    },
+    {
+      "username": "service-account-cinx-gateway-service",
+      "enabled": true,
+      "serviceAccountClientId": "cinx-gateway-service",
+      "clientRoles": {
+        "cinx-auth-internal": ["auth.internal.authorization-state.read"]
+      }
+    },
+    {
+      "username": "service-account-cinx-notification-service",
+      "enabled": true,
+      "serviceAccountClientId": "cinx-notification-service",
+      "clientRoles": {
+        "cinx-auth-internal": ["auth.internal.permission-members.read", "auth.internal.authorization-state.read"],
+        "cinx-user-internal": ["user.internal.profile.read"],
+        "cinx-learning-internal": ["learning.internal.course.read", "learning.internal.enrollment.read"]
+      }
+    },
+    {
+      "username":"service-account-cinx-user-service","enabled":true,"serviceAccountClientId":"cinx-user-service",
+      "clientRoles":{"cinx-auth-internal":["auth.internal.authorization-state.read"]}
+    },
+    {
+      "username":"service-account-cinx-commerce-service","enabled":true,"serviceAccountClientId":"cinx-commerce-service",
+      "clientRoles":{"cinx-auth-internal":["auth.internal.authorization-state.read"],"cinx-learning-internal":["learning.internal.course.read"]}
+    },
+    {
+      "username":"service-account-cinx-learning-service","enabled":true,"serviceAccountClientId":"cinx-learning-service",
+      "clientRoles":{"cinx-auth-internal":["auth.internal.authorization-state.read"],"cinx-user-internal":["user.internal.profile.read"],"cinx-commerce-internal":["commerce.internal.entitlement.read"],"cinx-assistant-internal":["assistant.internal.reminder.write"]}
+    },
+    {
+      "username":"service-account-cinx-reporting-service","enabled":true,"serviceAccountClientId":"cinx-reporting-service",
+      "clientRoles":{"cinx-auth-internal":["auth.internal.authorization-state.read"],"cinx-learning-internal":["learning.internal.enrollment.read"]}
+    },
+    {
+      "username":"service-account-cinx-recommendation-service","enabled":true,"serviceAccountClientId":"cinx-recommendation-service",
+      "clientRoles":{"cinx-auth-internal":["auth.internal.authorization-state.read"],"cinx-commerce-internal":["commerce.internal.entitlement.read"],"cinx-learning-internal":["learning.internal.course.read"]}
+    },
+    {
+      "username":"service-account-cinx-assistant-service","enabled":true,"serviceAccountClientId":"cinx-assistant-service",
+      "clientRoles":{"cinx-auth-internal":["auth.internal.authorization-state.read"],"cinx-commerce-internal":["commerce.internal.entitlement.read"],"cinx-learning-internal":["learning.internal.transcript.read","learning.internal.material.read","learning.internal.report.read"],"cinx-reporting-internal":["reporting.internal.overview.read"]}
+    }
+  ],
+  "eventsEnabled": true,
+  "adminEventsEnabled": true,
+  "adminEventsDetailsEnabled": true
+}
