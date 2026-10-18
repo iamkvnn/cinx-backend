@@ -78,6 +78,22 @@ services:
     - ./env/dev/gateway.env
     build: ./gateway
     image: cinx-gateway:local
+  auth:
+    container_name: auth-service
+    networks:
+    - cinx-network
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      eureka-server:
+        condition: service_started
+    env_file:
+    - ./env/dev/common.env
+    - ./env/dev/auth.env
+    build: ./auth
+    image: cinx-auth:local
 networks:
   cinx-network:
     driver: bridge
