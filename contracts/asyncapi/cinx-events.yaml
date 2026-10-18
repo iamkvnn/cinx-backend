@@ -1,0 +1,2768 @@
+asyncapi: 3.0.0
+id: urn:cinx:contracts:domain-events
+info:
+  title: CINX Domain Events
+  version: 2.0.0
+  description: |
+    Machine-readable RabbitMQ contracts shared by CINX deployables.
+    Channel addresses are AMQP routing keys; the AMQP channel binding names the exchange.
+  tags:
+    - name: auth
+      description: Identity lifecycle events.
+    - name: commerce
+      description: Order and wishlist events.
+    - name: learning
+      description: Catalog, entitlement, notification, community and subtitle request events.
+    - name: user
+      description: Profile, preference, policy and instructor lifecycle events.
+    - name: subtitle-ai
+      description: Subtitle worker result events.
+    - name: assistant
+      description: Outcomes of actions the AI assistant proposed.
+defaultContentType: application/json
+
+servers:
+  rabbitmq:
+    host: "{hostname}:{port}"
+    pathname: /
+    protocol: amqp
+    protocolVersion: "0-9-1"
+    description: CINX RabbitMQ broker. Runtime credentials and host values come from service configuration.
+    variables:
+      hostname:
+        default: rabbitmq
+        description: RabbitMQ host visible to the running service.
+      port:
+        default: "5672"
+        description: RabbitMQ AMQP port.
+    security:
+      - $ref: "#/components/securitySchemes/rabbitCredentials"
+
+x-known-runtime-drift:
+  - id: java-local-date-time-offset
+    channels:
+      - learning.enrollment.granted
+      - learning.course.sellability.changed
+      - course.course.published
+      - course.course.updated
+      - course.course.archived
+      - user.instructor.application.submitted
+      - user.policy.published
+      - user.policy.archived
+    description: Several Java publishers serialize LocalDateTime without an offset although the contract timestamp format is RFC 3339 date-time.
+channels:
+  authAuthorizationChanged:
+    address: auth.authorization.changed
+    servers:
+      - $ref: "#/servers/rabbitmq"
+    messages:
+      AuthAuthorizationChanged:
+        $ref: "#/components/messages/AuthAuthorizationChanged"
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: auth.events.exchange
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+        bindingVersion: "0.3.0"
+    x-delivery: at-least-once
+    x-compatibility: new-v2-full-snapshot
+    x-producer:
+      service: auth
+      implementation: com.cinx.auth.identity.infrastructure.messaging.IdentityEventPublisher
+    x-consumers:
+      - { service: notification, queue: notification.auth.queue, bindingKey: auth.# }
+      - { service: reporting, queue: reporting.auth.queue, bindingKey: auth.# }
+      - { service: commerce, queue: commerce.auth-authorization.queue, bindingKey: auth.authorization.changed }
+
+  commerceOrderPaid:
+    address: commerce.order.paid
+    servers:
+      - $ref: "#/servers/rabbitmq"
+    messages:
+      CommerceOrderPaid:
+        $ref: "#/components/messages/CommerceOrderPaid"
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: cinx.domain.events
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+        bindingVersion: "0.3.0"
+    x-producer:
+      service: commerce
+      implementation: com.cinx.commerce.payment.application.PaymentCallbackService
+    x-consumers:
+      - service: learning
+        queue: learning.commerce-order-paid.queue
+        bindingKey: commerce.order.paid
+      - service: notification
+        queue: notification.payment.queue
+        bindingKey: commerce.order.paid
+      - service: reporting
+        queue: reporting.commerce.queue
+        bindingKey: commerce.order.paid
+
+  commerceWishlistAdded:
+    address: commerce.wishlist.added
+    servers:
+      - $ref: "#/servers/rabbitmq"
+    messages:
+      CommerceWishlistAdded:
+        $ref: "#/components/messages/CommerceWishlistAdded"
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: cinx.domain.events
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+        bindingVersion: "0.3.0"
+    x-producer:
+      service: commerce
+      implementation: com.cinx.commerce.wishlist.application.WishlistService
+    x-consumers:
+      - service: recommendation
+        queue: recommendation.social.queue
+        bindingKey: commerce.wishlist.added
+
+  commerceWishlistRemoved:
+    address: commerce.wishlist.removed
+    servers:
+      - $ref: "#/servers/rabbitmq"
+    messages:
+      CommerceWishlistRemoved:
+        $ref: "#/components/messages/CommerceWishlistRemoved"
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: cinx.domain.events
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+        bindingVersion: "0.3.0"
+    x-producer:
+      service: commerce
+      implementation: com.cinx.commerce.wishlist.application.WishlistService
+    x-consumers:
+      - service: recommendation
+        queue: recommendation.social.queue
+        bindingKey: commerce.wishlist.removed
+
+  learningEnrollmentGranted:
+    address: learning.enrollment.granted
+    servers:
+      - $ref: "#/servers/rabbitmq"
+    messages:
+      LearningEnrollmentGranted:
+        $ref: "#/components/messages/LearningEnrollmentGranted"
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: learning.events.exchange
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+        bindingVersion: "0.3.0"
+    x-producer:
+      service: learning
+      implementation: com.cinx.learning.entitlement.infrastructure.messaging.EntitlementEventPublisher
+    x-consumers:
+      - service: learning
+        queue: learning.catalog-enrollment-granted.queue
+        bindingKey: learning.enrollment.granted
+      - service: recommendation
+        queue: recommendation.enrollment.queue
+        bindingKey: learning.enrollment.granted
+      - service: reporting
+        queue: reporting.learning.queue
+        bindingKey: learning.enrollment.granted
+
+  courseSellabilityChanged:
+    address: learning.course.sellability.changed
+    servers:
+      - $ref: "#/servers/rabbitmq"
+    messages:
+      CourseSellabilityChanged:
+        $ref: "#/components/messages/CourseSellabilityChanged"
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: cinx.domain.events
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+        bindingVersion: "0.3.0"
+    x-producer:
+      service: learning
+      implementation: com.cinx.learning.catalog.infrastructure.messaging.CourseEventProducer
+    x-consumers:
+      - service: commerce
+        queue: commerce.course-sellability
+        bindingKey: learning.course.sellability.changed
+
+  courseTranscriptsChanged:
+    address: learning.course.transcripts.changed
+    description: >-
+      The transcripts a published course offers may have changed (approved, unarchived, archived, or a
+      subtitle track of a published lesson written). Carries no text: the consumer re-reads the course
+      from GET /internal/courses/{courseId}/transcripts.
+    servers:
+      - $ref: "#/servers/rabbitmq"
+    messages:
+      CourseTranscriptsChanged:
+        $ref: "#/components/messages/CourseTranscriptsChanged"
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: cinx.domain.events
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+        bindingVersion: "0.3.0"
+    x-producer:
+      service: learning
+      implementation: com.cinx.learning.catalog.infrastructure.messaging.CourseEventProducer
+    x-consumers:
+      - service: assistant
+        queue: assistant.transcripts.queue
+        bindingKey: learning.course.transcripts.changed
+
+  learningPathCheckoutRequested:
+    address: learning.path.checkout.requested
+    servers:
+      - $ref: "#/servers/rabbitmq"
+    messages:
+      LearningPathCheckoutRequested:
+        $ref: "#/components/messages/LearningPathCheckoutRequested"
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: cinx.domain.events
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+        bindingVersion: "0.3.0"
+    x-producer:
+      service: learning
+      implementation: com.cinx.learning.enrollment.infrastructure.client.CartClient
+    x-consumers:
+      - service: commerce
+        queue: commerce.learning-path-checkout
+        bindingKey: learning.path.checkout.requested
+
+  courseRecommendationPublished:
+    address: course.course.published
+    servers:
+      - $ref: "#/servers/rabbitmq"
+    messages:
+      CoursePublished:
+        $ref: "#/components/messages/CoursePublished"
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: learning.events.exchange
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+        bindingVersion: "0.3.0"
+    x-producer:
+      service: learning
+      implementation: com.cinx.learning.catalog.infrastructure.messaging.CourseEventProducer
+    x-consumers:
+      - service: recommendation
+        queue: recommendation.course.queue
+        bindingKey: course.course.published
+
+  courseRecommendationUpdated:
+    address: course.course.updated
+    servers:
+      - $ref: "#/servers/rabbitmq"
+    messages:
+      CourseUpdated:
+        $ref: "#/components/messages/CourseUpdated"
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: learning.events.exchange
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+        bindingVersion: "0.3.0"
+    x-producer:
+      service: learning
+      implementation: com.cinx.learning.catalog.infrastructure.messaging.CourseEventProducer
+    x-consumers:
+      - service: recommendation
+        queue: recommendation.course.queue
+        bindingKey: course.course.updated
+
+  courseRecommendationArchived:
+    address: course.course.archived
+    servers:
+      - $ref: "#/servers/rabbitmq"
+    messages:
+      CourseArchived:
+        $ref: "#/components/messages/CourseArchived"
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: learning.events.exchange
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+        bindingVersion: "0.3.0"
+    x-producer:
+      service: learning
+      implementation: com.cinx.learning.catalog.infrastructure.messaging.CourseEventProducer
+    x-consumers:
+      - service: recommendation
+        queue: recommendation.course.queue
+        bindingKey: course.course.archived
+
+  courseContentPublished:
+    address: course.content.published
+    servers:
+      - $ref: "#/servers/rabbitmq"
+    messages:
+      CourseContentPublished:
+        $ref: "#/components/messages/CourseContentPublished"
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: learning.events.exchange
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+        bindingVersion: "0.3.0"
+    x-producer:
+      service: learning
+      implementation: com.cinx.learning.catalog.infrastructure.messaging.CourseEventProducer
+    x-consumers:
+      - service: learning
+        queue: learning.lesson-change.queue
+        bindingKey: course.content.published
+      - service: notification
+        queue: notification.course.queue
+        bindingKey: course.content.published
+
+  courseApprovalRequested:
+    address: course.approval.requested
+    servers:
+      - $ref: "#/servers/rabbitmq"
+    messages:
+      CourseApprovalRequested:
+        $ref: "#/components/messages/CourseApprovalRequested"
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: learning.events.exchange
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+        bindingVersion: "0.3.0"
+    x-producer:
+      service: learning
+      implementation: com.cinx.learning.catalog.infrastructure.messaging.CourseEventProducer
+    x-consumers:
+      - service: notification
+        queue: notification.course-approval.queue
+        bindingKey: course.approval.requested
+
+  courseCollaboratorInvited:
+    address: course.collaborator.invited
+    servers:
+      - $ref: "#/servers/rabbitmq"
+    messages:
+      CourseCollaboratorInvited:
+        $ref: "#/components/messages/CourseCollaboratorInvited"
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: learning.events.exchange
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+        bindingVersion: "0.3.0"
+    x-producer:
+      service: learning
+      implementation: com.cinx.learning.catalog.infrastructure.messaging.CourseEventProducer
+    x-consumers:
+      - service: notification
+        queue: notification.course-collaborator.queue
+        bindingKey: course.collaborator.invited
+
+  learningCourseCompleted:
+    address: learning.course.completed
+    servers:
+      - $ref: "#/servers/rabbitmq"
+    messages:
+      CourseCompleted:
+        $ref: "#/components/messages/CourseCompleted"
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: learning.events.exchange
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+        bindingVersion: "0.3.0"
+    x-producer:
+      service: learning
+      implementation: com.cinx.learning.notificationprojection.infrastructure.messaging.NotificationPublisher
+    x-consumers:
+      - service: notification
+        queue: notification.learning.queue
+        bindingKey: learning.course.completed
+
+  learningStudyReminderDue:
+    address: learning.study-reminder.due
+    servers:
+      - $ref: "#/servers/rabbitmq"
+    messages:
+      StudyReminderDue:
+        $ref: "#/components/messages/StudyReminderDue"
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: learning.events.exchange
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+        bindingVersion: "0.3.0"
+    x-producer:
+      service: learning
+      implementation: com.cinx.learning.notificationprojection.infrastructure.messaging.NotificationPublisher
+    x-consumers:
+      - service: notification
+        queue: notification.learning.queue
+        bindingKey: learning.study-reminder.due
+
+  learningSubtitleJobFinished:
+    address: learning.subtitle.job.finished
+    servers:
+      - $ref: "#/servers/rabbitmq"
+    messages:
+      SubtitleJobFinished:
+        $ref: "#/components/messages/SubtitleJobFinished"
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: learning.events.exchange
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+        bindingVersion: "0.3.0"
+    x-producer:
+      service: learning
+      implementation: com.cinx.learning.notificationprojection.infrastructure.messaging.NotificationPublisher
+    x-consumers:
+      - service: notification
+        queue: notification.learning.queue
+        bindingKey: learning.subtitle.job.finished
+
+  learningReminderDue:
+    address: learning.reminder.due
+    description: Deprecated. Nothing produces it since learning.study-reminder.due replaced the 08:00 job; the consumer stays for messages already queued.
+    servers:
+      - $ref: "#/servers/rabbitmq"
+    messages:
+      DailyReminderDue:
+        $ref: "#/components/messages/DailyReminderDue"
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: learning.events.exchange
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+        bindingVersion: "0.3.0"
+    x-producer:
+      service: learning
+      implementation: com.cinx.learning.notificationprojection.infrastructure.messaging.NotificationPublisher
+    x-consumers:
+      - service: notification
+        queue: notification.learning.queue
+        bindingKey: learning.reminder.due
+
+  learningCertificateRequested:
+    address: learning.certificate.requested
+    servers:
+      - $ref: "#/servers/rabbitmq"
+    messages:
+      CertificateRequested:
+        $ref: "#/components/messages/CertificateRequested"
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: learning.events.exchange
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+        bindingVersion: "0.3.0"
+    x-producer:
+      service: learning
+      implementation: com.cinx.learning.notificationprojection.infrastructure.messaging.NotificationPublisher
+    x-consumers:
+      - service: notification
+        queue: notification.learning.queue
+        bindingKey: learning.certificate.requested
+
+  learningCertificateApproved:
+    address: learning.certificate.approved
+    servers:
+      - $ref: "#/servers/rabbitmq"
+    messages:
+      CertificateApproved:
+        $ref: "#/components/messages/CertificateApproved"
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: learning.events.exchange
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+        bindingVersion: "0.3.0"
+    x-producer:
+      service: learning
+      implementation: com.cinx.learning.notificationprojection.infrastructure.messaging.NotificationPublisher
+    x-consumers:
+      - service: notification
+        queue: notification.learning.queue
+        bindingKey: learning.certificate.approved
+
+  courseReviewCreated:
+    address: social.review.created
+    servers:
+      - $ref: "#/servers/rabbitmq"
+    messages:
+      CourseReviewCreated:
+        $ref: "#/components/messages/CourseReviewCreated"
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: learning.events.exchange
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+        bindingVersion: "0.3.0"
+    x-producer:
+      service: learning
+      implementation: com.cinx.learning.community.infrastructure.messaging.CourseReviewEventPublisher
+    x-consumers:
+      - service: notification
+        queue: notification.social.queue
+        bindingKey: social.review.created
+
+  courseQuestionCreated:
+    address: question.created
+    servers:
+      - $ref: "#/servers/rabbitmq"
+    messages:
+      CourseQuestionCreated:
+        $ref: "#/components/messages/CourseQuestionCreated"
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: learning.events.exchange
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+        bindingVersion: "0.3.0"
+    x-producer:
+      service: learning
+      implementation: com.cinx.learning.community.infrastructure.messaging.CourseQnAEventPublisher
+    x-consumers:
+      - service: notification
+        queue: notification.social.queue
+        bindingKey: question.created
+
+  courseAnswerCreated:
+    address: answer.created
+    servers:
+      - $ref: "#/servers/rabbitmq"
+    messages:
+      CourseAnswerCreated:
+        $ref: "#/components/messages/CourseAnswerCreated"
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: learning.events.exchange
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+        bindingVersion: "0.3.0"
+    x-producer:
+      service: learning
+      implementation: com.cinx.learning.community.infrastructure.messaging.CourseQnAEventPublisher
+    x-consumers:
+      - service: notification
+        queue: notification.social.queue
+        bindingKey: answer.created
+
+  subtitleGenerateRequested:
+    address: learning.subtitle.generate.requested
+    servers:
+      - $ref: "#/servers/rabbitmq"
+    messages:
+      SubtitleGenerateRequested:
+        $ref: "#/components/messages/SubtitleGenerateRequested"
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: learning.events.exchange
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+        bindingVersion: "0.3.0"
+    x-producer:
+      service: learning
+      implementation: com.cinx.learning.catalog.infrastructure.messaging.CourseEventProducer
+    x-consumers:
+      - service: subtitle-ai
+        queue: subtitle-ai.learning.queue
+        bindingKey: learning.subtitle.generate.requested
+
+  subtitleTranslateRequested:
+    address: learning.subtitle.translate.requested
+    servers:
+      - $ref: "#/servers/rabbitmq"
+    messages:
+      SubtitleTranslateRequested:
+        $ref: "#/components/messages/SubtitleTranslateRequested"
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: learning.events.exchange
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+        bindingVersion: "0.3.0"
+    x-producer:
+      service: learning
+      implementation: com.cinx.learning.catalog.infrastructure.messaging.CourseEventProducer
+    x-consumers:
+      - service: subtitle-ai
+        queue: subtitle-ai.learning.translate.queue
+        bindingKey: learning.subtitle.translate.requested
+
+  userInstructorVerified:
+    address: user.instructor.verified
+    servers:
+      - $ref: "#/servers/rabbitmq"
+    messages:
+      UserInstructorVerified:
+        $ref: "#/components/messages/UserInstructorVerified"
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: user.events.exchange
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+        bindingVersion: "0.3.0"
+    x-producer:
+      service: user
+      implementation: com.cinx.user.profile.infrastructure.messaging.UserEventProducer
+    x-consumers:
+      - service: auth
+        queue: auth.user-lifecycle.queue
+        bindingKey: user.instructor.verified
+      - service: notification
+        queue: notification.user.queue
+        bindingKey: user.#
+      - service: reporting
+        queue: reporting.user.queue
+        bindingKey: user.instructor.#
+
+  userInstructorRejected:
+    address: user.instructor.rejected
+    servers:
+      - $ref: "#/servers/rabbitmq"
+    messages:
+      UserInstructorRejected:
+        $ref: "#/components/messages/UserInstructorRejected"
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: user.events.exchange
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+        bindingVersion: "0.3.0"
+    x-producer:
+      service: user
+      implementation: com.cinx.user.profile.infrastructure.messaging.UserEventProducer
+    x-consumers:
+      - service: notification
+        queue: notification.user.queue
+        bindingKey: user.#
+      - service: reporting
+        queue: reporting.user.queue
+        bindingKey: user.instructor.#
+
+  userInstructorTerminated:
+    address: user.instructor.terminated
+    servers:
+      - $ref: "#/servers/rabbitmq"
+    messages:
+      UserInstructorTerminated:
+        $ref: "#/components/messages/UserInstructorTerminated"
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: user.events.exchange
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+        bindingVersion: "0.3.0"
+    x-producer:
+      service: user
+      implementation: com.cinx.user.profile.infrastructure.messaging.UserEventProducer
+    x-consumers:
+      - service: auth
+        queue: auth.user-lifecycle.queue
+        bindingKey: user.instructor.terminated
+      - service: notification
+        queue: notification.user.queue
+        bindingKey: user.#
+      - service: reporting
+        queue: reporting.user.queue
+        bindingKey: user.instructor.#
+
+  userInstructorPending:
+    address: user.instructor.pending
+    servers:
+      - $ref: "#/servers/rabbitmq"
+    messages:
+      UserInstructorPending:
+        $ref: "#/components/messages/UserInstructorPending"
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: user.events.exchange
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+        bindingVersion: "0.3.0"
+    x-producer:
+      service: user
+      implementation: com.cinx.user.profile.infrastructure.messaging.UserEventProducer
+    x-consumers:
+      - service: notification
+        queue: notification.user.queue
+        bindingKey: user.#
+      - service: reporting
+        queue: reporting.user.queue
+        bindingKey: user.instructor.#
+
+  userInstructorApplicationSubmitted:
+    address: user.instructor.application.submitted
+    servers:
+      - $ref: "#/servers/rabbitmq"
+    messages:
+      UserInstructorApplicationSubmitted:
+        $ref: "#/components/messages/UserInstructorApplicationSubmitted"
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: user.events.exchange
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+        bindingVersion: "0.3.0"
+    x-producer:
+      service: user
+      implementation: com.cinx.user.profile.infrastructure.messaging.UserEventProducer
+    x-consumers:
+      - service: notification
+        queue: notification.user.queue
+        bindingKey: user.#
+      - service: reporting
+        queue: reporting.user.queue
+        bindingKey: user.instructor.#
+
+  userPreferenceUpdated:
+    address: user.preference.updated
+    servers:
+      - $ref: "#/servers/rabbitmq"
+    messages:
+      UserPreferenceUpdated:
+        $ref: "#/components/messages/UserPreferenceUpdated"
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: user.events.exchange
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+        bindingVersion: "0.3.0"
+    x-producer:
+      service: user
+      implementation: com.cinx.user.profile.infrastructure.messaging.UserEventProducer
+    x-consumers:
+      - service: recommendation
+        queue: recommendation.user.queue
+        bindingKey: user.preference.updated
+      - service: notification
+        queue: notification.user.queue
+        bindingKey: user.#
+
+  userLearningProfileUpdated:
+    address: user.learning-profile.updated
+    servers:
+      - $ref: "#/servers/rabbitmq"
+    messages:
+      UserLearningProfileUpdated:
+        $ref: "#/components/messages/UserLearningProfileUpdated"
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: user.events.exchange
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+        bindingVersion: "0.3.0"
+    x-producer:
+      service: user
+      implementation: com.cinx.user.profile.infrastructure.messaging.UserEventProducer
+    x-consumers:
+      - service: recommendation
+        queue: recommendation.user.queue
+        bindingKey: user.learning-profile.updated
+      - service: reporting
+        queue: reporting.analytics-consent.queue
+        bindingKey: user.learning-profile.updated
+        note: Keeps only usageAnalyticsConsent, to drop the product events of a learner who switched it off.
+      - service: notification
+        queue: notification.user.queue
+        bindingKey: user.#
+        note: Received through the wildcard binding and ignored; it carries no notification.
+
+  userProfileOnboarded:
+    address: user.profile.onboarded
+    servers:
+      - $ref: "#/servers/rabbitmq"
+    messages:
+      UserProfileOnboarded:
+        $ref: "#/components/messages/UserProfileOnboarded"
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: user.events.exchange
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+        bindingVersion: "0.3.0"
+    x-producer:
+      service: user
+      implementation: com.cinx.user.profile.infrastructure.messaging.UserEventProducer
+    x-consumers:
+      - service: auth
+        queue: auth.user-lifecycle.queue
+        bindingKey: user.profile.onboarded
+      - service: commerce
+        queue: commerce.user-onboarding.queue
+        bindingKey: user.profile.onboarded
+      - service: notification
+        queue: notification.user.queue
+        bindingKey: user.#
+
+  userPolicyPublished:
+    address: user.policy.published
+    servers:
+      - $ref: "#/servers/rabbitmq"
+    messages:
+      UserPolicyPublished:
+        $ref: "#/components/messages/UserPolicyPublished"
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: user.events.exchange
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+        bindingVersion: "0.3.0"
+    x-producer:
+      service: user
+      implementation: com.cinx.user.profile.infrastructure.messaging.UserEventProducer
+    x-consumers:
+      - service: recommendation
+        queue: recommendation.user.queue
+        bindingKey: user.policy.published
+      - service: notification
+        queue: notification.user.queue
+        bindingKey: user.#
+      - service: assistant
+        queue: assistant.policy.queue
+        bindingKey: user.policy.published
+
+  userPolicyArchived:
+    address: user.policy.archived
+    servers:
+      - $ref: "#/servers/rabbitmq"
+    messages:
+      UserPolicyArchived:
+        $ref: "#/components/messages/UserPolicyArchived"
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: user.events.exchange
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+        bindingVersion: "0.3.0"
+    x-producer:
+      service: user
+      implementation: com.cinx.user.profile.infrastructure.messaging.UserEventProducer
+    x-consumers:
+      - service: recommendation
+        queue: recommendation.user.queue
+        bindingKey: user.policy.archived
+      - service: notification
+        queue: notification.user.queue
+        bindingKey: user.#
+      - service: assistant
+        queue: assistant.policy.queue
+        bindingKey: user.policy.archived
+
+  subtitleJobProgress:
+    address: ai.subtitle.job.progress
+    servers:
+      - $ref: "#/servers/rabbitmq"
+    messages:
+      SubtitleJobProgress:
+        $ref: "#/components/messages/SubtitleJobProgress"
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: ai.subtitle.events.exchange
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+        bindingVersion: "0.3.0"
+    x-producer:
+      service: subtitle-ai
+      implementation: app.messaging.rabbitmq.SubtitleEventPublisher
+    x-consumers:
+      - service: learning
+        queue: learning.subtitle.ai.queue
+        bindingKey: ai.subtitle.job.progress
+
+  subtitleJobCompleted:
+    address: ai.subtitle.job.completed
+    servers:
+      - $ref: "#/servers/rabbitmq"
+    messages:
+      SubtitleJobCompleted:
+        $ref: "#/components/messages/SubtitleJobCompleted"
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: ai.subtitle.events.exchange
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+        bindingVersion: "0.3.0"
+    x-producer:
+      service: subtitle-ai
+      implementation: app.messaging.rabbitmq.SubtitleEventPublisher
+    x-consumers:
+      - service: learning
+        queue: learning.subtitle.ai.queue
+        bindingKey: ai.subtitle.job.completed
+
+  subtitleJobFailed:
+    address: ai.subtitle.job.failed
+    servers:
+      - $ref: "#/servers/rabbitmq"
+    messages:
+      SubtitleJobFailed:
+        $ref: "#/components/messages/SubtitleJobFailed"
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: ai.subtitle.events.exchange
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+        bindingVersion: "0.3.0"
+    x-producer:
+      service: subtitle-ai
+      implementation: app.messaging.rabbitmq.SubtitleEventPublisher
+    x-consumers:
+      - service: learning
+        queue: learning.subtitle.ai.queue
+        bindingKey: ai.subtitle.job.failed
+
+  commerceSubscriptionEntitlementsChanged:
+    address: commerce.subscription.entitlements.changed
+    servers:
+      - $ref: "#/servers/rabbitmq"
+    messages:
+      CommerceSubscriptionEntitlementsChanged:
+        $ref: "#/components/messages/CommerceSubscriptionEntitlementsChanged"
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: cinx.domain.events
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+        bindingVersion: "0.3.0"
+    x-producer:
+      service: commerce
+      implementation: com.cinx.commerce.subscription.infrastructure.messaging.EntitlementSnapshotPublisher
+    x-consumers:
+      - service: learning
+        queue: learning.subscription-entitlement.queue
+        bindingKey: commerce.subscription.entitlements.changed
+      - service: recommendation
+        queue: recommendation.subscription-entitlement.queue
+        bindingKey: commerce.subscription.entitlements.changed
+      - service: notification
+        queue: notification.subscription-entitlement.queue
+        bindingKey: commerce.subscription.entitlements.changed
+      - service: reporting
+        queue: reporting.subscription-entitlement.queue
+        bindingKey: commerce.subscription.entitlements.changed
+      - service: assistant
+        queue: assistant.subscription-entitlement.queue
+        bindingKey: commerce.subscription.entitlements.changed
+
+  assistantActionDecided:
+    address: assistant.action.decided
+    servers:
+      - $ref: "#/servers/rabbitmq"
+    messages:
+      AssistantActionDecided:
+        $ref: "#/components/messages/AssistantActionDecided"
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: cinx.domain.events
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+        bindingVersion: "0.3.0"
+    x-producer:
+      service: assistant
+      implementation: assistant/app/actions/service.py (outbox_event, relayed by app/messaging/relay.py)
+    x-consumers: []
+
+operations:
+  publishCommerceSubscriptionEntitlementsChanged:
+    action: send
+    channel:
+      $ref: "#/channels/commerceSubscriptionEntitlementsChanged"
+    bindings:
+      amqp: { deliveryMode: 2, bindingVersion: "0.3.0" }
+    x-producer: commerce
+    x-consumers: [learning, recommendation, notification, reporting, assistant]
+
+  publishAuthAuthorizationChanged:
+    action: send
+    channel:
+      $ref: "#/channels/authAuthorizationChanged"
+    bindings:
+      amqp: { deliveryMode: 2, bindingVersion: "0.3.0" }
+    x-producer: auth
+    x-consumers: [notification, reporting]
+
+  publishCommerceOrderPaid:
+    action: send
+    description: Written by the payment callback, and by checkout itself when a voucher brings the total to zero; same payload either way.
+    channel:
+      $ref: "#/channels/commerceOrderPaid"
+    bindings:
+      amqp: { deliveryMode: 2, bindingVersion: "0.3.0" }
+    x-producer: commerce
+    x-consumers: [learning, notification, reporting]
+
+  publishCommerceWishlistAdded:
+    action: send
+    channel:
+      $ref: "#/channels/commerceWishlistAdded"
+    bindings:
+      amqp: { deliveryMode: 2, bindingVersion: "0.3.0" }
+    x-producer: commerce
+    x-consumers: [recommendation]
+
+  publishCommerceWishlistRemoved:
+    action: send
+    channel:
+      $ref: "#/channels/commerceWishlistRemoved"
+    bindings:
+      amqp: { deliveryMode: 2, bindingVersion: "0.3.0" }
+    x-producer: commerce
+    x-consumers: [recommendation]
+
+  publishLearningEnrollmentGranted:
+    action: send
+    channel:
+      $ref: "#/channels/learningEnrollmentGranted"
+    bindings:
+      amqp: { deliveryMode: 2, bindingVersion: "0.3.0" }
+    x-producer: learning
+    x-consumers: [learning, recommendation, reporting]
+
+  publishCourseSellabilityChanged:
+    action: send
+    channel:
+      $ref: "#/channels/courseSellabilityChanged"
+    bindings:
+      amqp: { deliveryMode: 2, bindingVersion: "0.3.0" }
+    x-producer: learning
+    x-consumers: [commerce]
+
+  publishCourseTranscriptsChanged:
+    action: send
+    channel:
+      $ref: "#/channels/courseTranscriptsChanged"
+    bindings:
+      amqp: { deliveryMode: 2, bindingVersion: "0.3.0" }
+    x-producer: learning
+    x-consumers: [assistant]
+
+  publishLearningPathCheckoutRequested:
+    action: send
+    channel:
+      $ref: "#/channels/learningPathCheckoutRequested"
+    bindings:
+      amqp: { deliveryMode: 2, bindingVersion: "0.3.0" }
+    x-producer: learning
+    x-consumers: [commerce]
+
+  publishCourseRecommendationPublished:
+    action: send
+    channel:
+      $ref: "#/channels/courseRecommendationPublished"
+    bindings:
+      amqp: { deliveryMode: 2, bindingVersion: "0.3.0" }
+    x-producer: learning
+    x-consumers: [recommendation]
+
+  publishCourseRecommendationUpdated:
+    action: send
+    channel:
+      $ref: "#/channels/courseRecommendationUpdated"
+    bindings:
+      amqp: { deliveryMode: 2, bindingVersion: "0.3.0" }
+    x-producer: learning
+    x-consumers: [recommendation]
+
+  publishCourseRecommendationArchived:
+    action: send
+    channel:
+      $ref: "#/channels/courseRecommendationArchived"
+    bindings:
+      amqp: { deliveryMode: 2, bindingVersion: "0.3.0" }
+    x-producer: learning
+    x-consumers: [recommendation]
+
+  publishCourseContentPublished:
+    action: send
+    channel:
+      $ref: "#/channels/courseContentPublished"
+    bindings:
+      amqp: { deliveryMode: 2, bindingVersion: "0.3.0" }
+    x-producer: learning
+    x-consumers: [learning, notification]
+
+  publishCourseApprovalRequested:
+    action: send
+    channel:
+      $ref: "#/channels/courseApprovalRequested"
+    bindings:
+      amqp: { deliveryMode: 2, bindingVersion: "0.3.0" }
+    x-producer: learning
+    x-consumers: [notification]
+
+  publishCourseCollaboratorInvited:
+    action: send
+    channel:
+      $ref: "#/channels/courseCollaboratorInvited"
+    bindings:
+      amqp: { deliveryMode: 2, bindingVersion: "0.3.0" }
+    x-producer: learning
+    x-consumers: [notification]
+
+  publishLearningCourseCompleted:
+    action: send
+    channel:
+      $ref: "#/channels/learningCourseCompleted"
+    bindings:
+      amqp: { deliveryMode: 2, bindingVersion: "0.3.0" }
+    x-producer: learning
+    x-consumers: [notification]
+
+  publishLearningReminderDue:
+    action: send
+    channel:
+      $ref: "#/channels/learningReminderDue"
+    bindings:
+      amqp: { deliveryMode: 2, bindingVersion: "0.3.0" }
+    x-producer: learning
+    x-consumers: [notification]
+
+  publishLearningStudyReminderDue:
+    action: send
+    channel:
+      $ref: "#/channels/learningStudyReminderDue"
+    bindings:
+      amqp: { deliveryMode: 2, bindingVersion: "0.3.0" }
+    x-producer: learning
+    x-consumers: [notification]
+
+  publishLearningSubtitleJobFinished:
+    action: send
+    channel:
+      $ref: "#/channels/learningSubtitleJobFinished"
+    bindings:
+      amqp: { deliveryMode: 2, bindingVersion: "0.3.0" }
+    x-producer: learning
+    x-consumers: [notification]
+
+  publishLearningCertificateRequested:
+    action: send
+    channel:
+      $ref: "#/channels/learningCertificateRequested"
+    bindings:
+      amqp: { deliveryMode: 2, bindingVersion: "0.3.0" }
+    x-producer: learning
+    x-consumers: [notification]
+
+  publishLearningCertificateApproved:
+    action: send
+    channel:
+      $ref: "#/channels/learningCertificateApproved"
+    bindings:
+      amqp: { deliveryMode: 2, bindingVersion: "0.3.0" }
+    x-producer: learning
+    x-consumers: [notification]
+
+  publishCourseReviewCreated:
+    action: send
+    channel:
+      $ref: "#/channels/courseReviewCreated"
+    bindings:
+      amqp: { deliveryMode: 2, bindingVersion: "0.3.0" }
+    x-producer: learning
+    x-consumers: [notification]
+
+  publishCourseQuestionCreated:
+    action: send
+    channel:
+      $ref: "#/channels/courseQuestionCreated"
+    bindings:
+      amqp: { deliveryMode: 2, bindingVersion: "0.3.0" }
+    x-producer: learning
+    x-consumers: [notification]
+
+  publishCourseAnswerCreated:
+    action: send
+    channel:
+      $ref: "#/channels/courseAnswerCreated"
+    bindings:
+      amqp: { deliveryMode: 2, bindingVersion: "0.3.0" }
+    x-producer: learning
+    x-consumers: [notification]
+
+  publishSubtitleGenerateRequested:
+    action: send
+    channel:
+      $ref: "#/channels/subtitleGenerateRequested"
+    bindings:
+      amqp: { deliveryMode: 2, bindingVersion: "0.3.0" }
+    x-producer: learning
+    x-consumers: [subtitle-ai]
+
+  publishSubtitleTranslateRequested:
+    action: send
+    channel:
+      $ref: "#/channels/subtitleTranslateRequested"
+    bindings:
+      amqp: { deliveryMode: 2, bindingVersion: "0.3.0" }
+    x-producer: learning
+    x-consumers: [subtitle-ai]
+
+  publishUserInstructorVerified:
+    action: send
+    channel:
+      $ref: "#/channels/userInstructorVerified"
+    bindings:
+      amqp: { deliveryMode: 2, bindingVersion: "0.3.0" }
+    x-producer: user
+    x-consumers: [auth, notification, reporting]
+
+  publishUserInstructorRejected:
+    action: send
+    channel:
+      $ref: "#/channels/userInstructorRejected"
+    bindings:
+      amqp: { deliveryMode: 2, bindingVersion: "0.3.0" }
+    x-producer: user
+    x-consumers: [notification, reporting]
+
+  publishUserInstructorTerminated:
+    action: send
+    channel:
+      $ref: "#/channels/userInstructorTerminated"
+    bindings:
+      amqp: { deliveryMode: 2, bindingVersion: "0.3.0" }
+    x-producer: user
+    x-consumers: [auth, notification, reporting]
+
+  publishUserInstructorPending:
+    action: send
+    channel:
+      $ref: "#/channels/userInstructorPending"
+    bindings:
+      amqp: { deliveryMode: 2, bindingVersion: "0.3.0" }
+    x-producer: user
+    x-consumers: [notification, reporting]
+
+  publishUserInstructorApplicationSubmitted:
+    action: send
+    channel:
+      $ref: "#/channels/userInstructorApplicationSubmitted"
+    bindings:
+      amqp: { deliveryMode: 2, bindingVersion: "0.3.0" }
+    x-producer: user
+    x-consumers: [notification, reporting]
+
+  publishUserPreferenceUpdated:
+    action: send
+    channel:
+      $ref: "#/channels/userPreferenceUpdated"
+    bindings:
+      amqp: { deliveryMode: 2, bindingVersion: "0.3.0" }
+    x-producer: user
+    x-consumers: [recommendation, notification]
+
+  publishUserLearningProfileUpdated:
+    action: send
+    channel:
+      $ref: "#/channels/userLearningProfileUpdated"
+    bindings:
+      amqp: { deliveryMode: 2, bindingVersion: "0.3.0" }
+    x-producer: user
+    x-consumers: [recommendation, notification]
+
+  publishUserProfileOnboarded:
+    action: send
+    channel:
+      $ref: "#/channels/userProfileOnboarded"
+    bindings:
+      amqp: { deliveryMode: 2, bindingVersion: "0.3.0" }
+    x-producer: user
+    x-consumers: [auth, notification]
+
+  publishUserPolicyPublished:
+    action: send
+    channel:
+      $ref: "#/channels/userPolicyPublished"
+    bindings:
+      amqp: { deliveryMode: 2, bindingVersion: "0.3.0" }
+    x-producer: user
+    x-consumers: [recommendation, notification, assistant]
+
+  publishUserPolicyArchived:
+    action: send
+    channel:
+      $ref: "#/channels/userPolicyArchived"
+    bindings:
+      amqp: { deliveryMode: 2, bindingVersion: "0.3.0" }
+    x-producer: user
+    x-consumers: [recommendation, notification, assistant]
+
+  publishSubtitleJobProgress:
+    action: send
+    channel:
+      $ref: "#/channels/subtitleJobProgress"
+    bindings:
+      amqp: { deliveryMode: 2, bindingVersion: "0.3.0" }
+    x-producer: subtitle-ai
+    x-consumers: [learning]
+
+  publishSubtitleJobCompleted:
+    action: send
+    channel:
+      $ref: "#/channels/subtitleJobCompleted"
+    bindings:
+      amqp: { deliveryMode: 2, bindingVersion: "0.3.0" }
+    x-producer: subtitle-ai
+    x-consumers: [learning]
+
+  publishSubtitleJobFailed:
+    action: send
+    channel:
+      $ref: "#/channels/subtitleJobFailed"
+    bindings:
+      amqp: { deliveryMode: 2, bindingVersion: "0.3.0" }
+    x-producer: subtitle-ai
+    x-consumers: [learning]
+
+  publishAssistantActionDecided:
+    action: send
+    channel:
+      $ref: "#/channels/assistantActionDecided"
+    bindings:
+      amqp: { deliveryMode: 2, bindingVersion: "0.3.0" }
+    x-producer: assistant
+    x-consumers: []
+
+components:
+  securitySchemes:
+    rabbitCredentials:
+      type: userPassword
+      description: RabbitMQ credentials supplied through service-scoped environment variables.
+
+  messages:
+    AuthAuthorizationChanged:
+      name: AuthAuthorizationChanged
+      headers:
+        $ref: "#/components/schemas/EventHeaders"
+      payload:
+        $ref: "#/components/schemas/AuthAuthorizationChangedPayload"
+      x-event-type: AuthAuthorizationChanged
+      x-event-version: 2
+
+    CommerceOrderPaid:
+      name: CommerceOrderPaid
+      headers:
+        $ref: "#/components/schemas/EventHeaders"
+      payload:
+        $ref: "#/components/schemas/CommerceOrderPaidPayload"
+      x-event-type: CommerceOrderPaid
+      x-event-version: 1
+
+    CommerceWishlistAdded:
+      name: CommerceWishlistAdded
+      headers:
+        $ref: "#/components/schemas/EventHeaders"
+      payload:
+        $ref: "#/components/schemas/CommerceWishlistPayload"
+      x-event-type: CommerceWishlistAdded
+      x-event-version: 1
+
+    CommerceWishlistRemoved:
+      name: CommerceWishlistRemoved
+      headers:
+        $ref: "#/components/schemas/EventHeaders"
+      payload:
+        $ref: "#/components/schemas/CommerceWishlistPayload"
+      x-event-type: CommerceWishlistRemoved
+      x-event-version: 1
+
+    LearningEnrollmentGranted:
+      name: LearningEnrollmentGranted
+      headers:
+        $ref: "#/components/schemas/EventHeaders"
+      payload:
+        $ref: "#/components/schemas/LearningEnrollmentGrantedPayload"
+      x-event-type: LearningEnrollmentGranted
+      x-event-version: 1
+
+    CourseSellabilityChanged:
+      name: CourseSellabilityChanged
+      headers:
+        $ref: "#/components/schemas/EventHeaders"
+      payload:
+        $ref: "#/components/schemas/CourseSellabilityChangedPayload"
+      x-event-type: CourseSellabilityChanged
+      x-event-version: 1
+
+    CourseTranscriptsChanged:
+      name: CourseTranscriptsChanged
+      headers:
+        $ref: "#/components/schemas/EventHeaders"
+      payload:
+        $ref: "#/components/schemas/CourseTranscriptsChangedPayload"
+      x-event-type: CourseTranscriptsChanged
+      x-event-version: 1
+
+    LearningPathCheckoutRequested:
+      name: LearningPathCheckoutRequested
+      headers:
+        $ref: "#/components/schemas/EventHeaders"
+      payload:
+        $ref: "#/components/schemas/LearningPathCheckoutRequestedPayload"
+      x-event-type: LearningPathCheckoutRequested
+      x-event-version: 1
+
+    CoursePublished:
+      name: CoursePublished
+      headers:
+        $ref: "#/components/schemas/EventHeaders"
+      payload:
+        $ref: "#/components/schemas/CourseRecommendationEventPayload"
+      x-event-type: CoursePublished
+      x-event-version: 1
+
+    CourseUpdated:
+      name: CourseUpdated
+      headers:
+        $ref: "#/components/schemas/EventHeaders"
+      payload:
+        $ref: "#/components/schemas/CourseRecommendationEventPayload"
+      x-event-type: CourseUpdated
+      x-event-version: 1
+
+    CourseArchived:
+      name: CourseArchived
+      headers:
+        $ref: "#/components/schemas/EventHeaders"
+      payload:
+        $ref: "#/components/schemas/CourseRecommendationEventPayload"
+      x-event-type: CourseArchived
+      x-event-version: 1
+
+    CourseContentPublished:
+      name: CourseContentPublished
+      headers:
+        $ref: "#/components/schemas/EventHeaders"
+      payload:
+        $ref: "#/components/schemas/CourseContentPublishedPayload"
+      x-event-type: CourseContentPublished
+      x-event-version: 1
+
+    CourseApprovalRequested:
+      name: CourseApprovalRequested
+      headers:
+        $ref: "#/components/schemas/EventHeaders"
+      payload:
+        $ref: "#/components/schemas/CourseApprovalRequestedPayload"
+      x-event-type: CourseApprovalRequested
+      x-event-version: 1
+
+    CourseCollaboratorInvited:
+      name: CourseCollaboratorInvited
+      headers:
+        $ref: "#/components/schemas/EventHeaders"
+      payload:
+        $ref: "#/components/schemas/CourseCollaboratorInvitedPayload"
+      x-event-type: CourseCollaboratorInvited
+      x-event-version: 1
+
+    CourseCompleted:
+      name: CourseCompleted
+      headers:
+        $ref: "#/components/schemas/EventHeaders"
+      payload:
+        $ref: "#/components/schemas/CourseCompletedPayload"
+      x-event-type: learning.course.completed
+      x-event-version: 1
+
+    DailyReminderDue:
+      name: DailyReminderDue
+      headers:
+        $ref: "#/components/schemas/EventHeaders"
+      payload:
+        $ref: "#/components/schemas/DailyReminderDuePayload"
+      x-event-type: learning.reminder.due
+      x-event-version: 1
+
+    StudyReminderDue:
+      name: StudyReminderDue
+      summary: A study reminder learning chose and wrote (template or the assistant's rewrite); notification only delivers it.
+      headers:
+        $ref: "#/components/schemas/EventHeaders"
+      payload:
+        $ref: "#/components/schemas/StudyReminderDuePayload"
+      x-event-type: learning.study-reminder.due
+      x-event-version: 1
+
+    SubtitleJobFinished:
+      name: SubtitleJobFinished
+      summary: An AI subtitle job ended; the instructor who asked for it reviews the track or retries.
+      headers:
+        $ref: "#/components/schemas/EventHeaders"
+      payload:
+        $ref: "#/components/schemas/SubtitleJobFinishedPayload"
+      x-event-type: learning.subtitle.job.finished
+      x-event-version: 1
+
+    CertificateRequested:
+      name: CertificateRequested
+      headers:
+        $ref: "#/components/schemas/EventHeaders"
+      payload:
+        $ref: "#/components/schemas/CertificateRequestedPayload"
+      x-event-type: learning.certificate.requested
+      x-event-version: 1
+
+    CertificateApproved:
+      name: CertificateApproved
+      headers:
+        $ref: "#/components/schemas/EventHeaders"
+      payload:
+        $ref: "#/components/schemas/CertificateApprovedPayload"
+      x-event-type: learning.certificate.approved
+      x-event-version: 1
+
+    CourseReviewCreated:
+      name: CourseReviewCreated
+      headers:
+        $ref: "#/components/schemas/EventHeaders"
+      payload:
+        $ref: "#/components/schemas/CourseReviewCreatedPayload"
+      x-event-type: CourseReviewCreated
+      x-event-version: 1
+
+    CourseQuestionCreated:
+      name: CourseQuestionCreated
+      headers:
+        $ref: "#/components/schemas/EventHeaders"
+      payload:
+        $ref: "#/components/schemas/CourseQuestionCreatedPayload"
+      x-event-type: CourseQuestionCreated
+      x-event-version: 1
+
+    CourseAnswerCreated:
+      name: CourseAnswerCreated
+      headers:
+        $ref: "#/components/schemas/EventHeaders"
+      payload:
+        $ref: "#/components/schemas/CourseAnswerCreatedPayload"
+      x-event-type: CourseAnswerCreated
+      x-event-version: 1
+
+    SubtitleGenerateRequested:
+      name: SubtitleGenerateRequested
+      headers:
+        $ref: "#/components/schemas/EventHeaders"
+      payload:
+        $ref: "#/components/schemas/SubtitleGenerateRequestedPayload"
+      x-event-type: SubtitleGenerateRequested
+      x-event-version: 1
+
+    SubtitleTranslateRequested:
+      name: SubtitleTranslateRequested
+      headers:
+        $ref: "#/components/schemas/EventHeaders"
+      payload:
+        $ref: "#/components/schemas/SubtitleTranslateRequestedPayload"
+      x-event-type: SubtitleTranslateRequested
+      x-event-version: 1
+
+    UserInstructorVerified:
+      name: UserInstructorVerified
+      headers:
+        $ref: "#/components/schemas/EventHeaders"
+      payload:
+        $ref: "#/components/schemas/UserInstructorVerifiedPayload"
+      x-event-type: user.instructor.verified
+      x-event-version: 1
+
+    UserInstructorRejected:
+      name: UserInstructorRejected
+      headers:
+        $ref: "#/components/schemas/EventHeaders"
+      payload:
+        $ref: "#/components/schemas/UserInstructorRejectedPayload"
+      x-event-type: user.instructor.rejected
+      x-event-version: 1
+
+    UserInstructorTerminated:
+      name: UserInstructorTerminated
+      headers:
+        $ref: "#/components/schemas/EventHeaders"
+      payload:
+        $ref: "#/components/schemas/UserInstructorTerminatedPayload"
+      x-event-type: user.instructor.terminated
+      x-event-version: 1
+
+    UserInstructorPending:
+      name: UserInstructorPending
+      headers:
+        $ref: "#/components/schemas/EventHeaders"
+      payload:
+        $ref: "#/components/schemas/UserInstructorPendingPayload"
+      x-event-type: user.instructor.pending
+      x-event-version: 1
+
+    UserInstructorApplicationSubmitted:
+      name: UserInstructorApplicationSubmitted
+      headers:
+        $ref: "#/components/schemas/EventHeaders"
+      payload:
+        $ref: "#/components/schemas/UserInstructorApplicationSubmittedPayload"
+      x-event-type: user.instructor.application.submitted
+      x-event-version: 1
+
+    UserPreferenceUpdated:
+      name: UserPreferenceUpdated
+      headers:
+        $ref: "#/components/schemas/EventHeaders"
+      payload:
+        $ref: "#/components/schemas/UserPreferenceUpdatedPayload"
+      x-event-type: user.preference.updated
+      x-event-version: 1
+
+    UserLearningProfileUpdated:
+      name: UserLearningProfileUpdated
+      summary: The learner's whole learning profile after a write; a consumer keeps the newest by occurredAt.
+      headers:
+        $ref: "#/components/schemas/EventHeaders"
+      payload:
+        $ref: "#/components/schemas/UserLearningProfileUpdatedPayload"
+      x-event-type: user.learning-profile.updated
+      x-event-version: 1
+
+    UserProfileOnboarded:
+      name: UserProfileOnboarded
+      headers:
+        $ref: "#/components/schemas/EventHeaders"
+      payload:
+        $ref: "#/components/schemas/UserProfileOnboardedPayload"
+      x-event-type: user.profile.onboarded
+      x-event-version: 1
+
+    UserPolicyPublished:
+      name: UserPolicyPublished
+      headers:
+        $ref: "#/components/schemas/EventHeaders"
+      payload:
+        $ref: "#/components/schemas/UserPolicyPublishedPayload"
+      x-event-type: user.policy.published
+      x-event-version: 1
+
+    UserPolicyArchived:
+      name: UserPolicyArchived
+      headers:
+        $ref: "#/components/schemas/EventHeaders"
+      payload:
+        $ref: "#/components/schemas/UserPolicyArchivedPayload"
+      x-event-type: user.policy.archived
+      x-event-version: 1
+
+    SubtitleJobProgress:
+      name: SubtitleJobProgress
+      headers:
+        $ref: "#/components/schemas/EventHeaders"
+      payload:
+        $ref: "#/components/schemas/SubtitleJobProgressPayload"
+      x-event-type: SubtitleJobProgress
+      x-event-version: 1
+
+    SubtitleJobCompleted:
+      name: SubtitleJobCompleted
+      headers:
+        $ref: "#/components/schemas/EventHeaders"
+      payload:
+        $ref: "#/components/schemas/SubtitleJobCompletedPayload"
+      x-event-type: SubtitleJobCompleted
+      x-event-version: 1
+
+    SubtitleJobFailed:
+      name: SubtitleJobFailed
+      headers:
+        $ref: "#/components/schemas/EventHeaders"
+      payload:
+        $ref: "#/components/schemas/SubtitleJobFailedPayload"
+      x-event-type: SubtitleJobFailed
+      x-event-version: 1
+
+    CommerceSubscriptionEntitlementsChanged:
+      name: CommerceSubscriptionEntitlementsChanged
+      headers:
+        $ref: "#/components/schemas/EventHeaders"
+      payload:
+        $ref: "#/components/schemas/CommerceSubscriptionEntitlementsChangedPayload"
+      x-event-type: commerce.subscription.entitlements.changed
+      x-event-version: 1
+
+    AssistantActionDecided:
+      name: AssistantActionDecided
+      headers:
+        $ref: "#/components/schemas/EventHeaders"
+      payload:
+        $ref: "#/components/schemas/AssistantActionDecidedPayload"
+      x-event-type: AssistantActionDecided
+      x-event-version: 1
+
+  schemas:
+    CommerceSubscriptionEntitlementsChangedPayload:
+      type: object
+      additionalProperties: false
+      required:
+        - eventId
+        - subjectType
+        - subjectId
+        - userId
+        - entitlementVersion
+        - accessStatus
+        - effectiveFrom
+        - accessEffectiveUntil
+        - reconcileBy
+        - currentPeriodStart
+        - currentPeriodEnd
+        - sources
+        - features
+        - occurredAt
+      properties:
+        eventId: { type: string, minLength: 1 }
+        subjectType: { type: string, enum: [USER] }
+        subjectId: { type: string, minLength: 1 }
+        userId: { type: string, minLength: 1 }
+        entitlementVersion: { type: integer, format: int64, minimum: 0 }
+        accessStatus: { type: string, enum: [ACTIVE, GRACE, INELIGIBLE, ENDED, INACTIVE] }
+        effectiveFrom: { $ref: "#/components/schemas/Timestamp" }
+        accessEffectiveUntil: { $ref: "#/components/schemas/NullableTimestamp" }
+        validUntil: { $ref: "#/components/schemas/NullableTimestamp" }
+        reconcileBy: { $ref: "#/components/schemas/NullableTimestamp" }
+        currentPeriodStart: { $ref: "#/components/schemas/NullableTimestamp" }
+        currentPeriodEnd: { $ref: "#/components/schemas/NullableTimestamp" }
+        sources:
+          type: array
+          items: { $ref: "#/components/schemas/EntitlementSource" }
+        features:
+          type: array
+          items: { $ref: "#/components/schemas/EntitlementFeature" }
+        occurredAt: { $ref: "#/components/schemas/Timestamp" }
+
+    EntitlementSource:
+      type: object
+      additionalProperties: false
+      required: [subscriptionId, subscriptionAggregateVersion, subscriptionSlot, productLine, planCode, planVersion]
+      properties:
+        subscriptionId: { type: string, minLength: 1 }
+        subscriptionAggregateVersion: { type: integer, format: int64, minimum: 1 }
+        subscriptionSlot: { type: string, minLength: 1 }
+        productLine: { type: string, minLength: 1 }
+        planCode: { type: string, minLength: 1 }
+        planVersion: { type: integer, format: int64, minimum: 1 }
+
+    EntitlementFeature:
+      type: object
+      additionalProperties: false
+      required: [key, type, effectiveUntil]
+      properties:
+        key: { type: string, pattern: "^[a-z][a-z0-9-]*(?:\\.[a-z0-9-]+)+$" }
+        type: { type: string, enum: [BOOLEAN, QUOTA] }
+        enabled: { type: boolean }
+        limit: { type: integer, format: int64, minimum: 0 }
+        unlimited: { type: boolean }
+        unit: { type: string, enum: [REQUEST, MINUTE, CREDIT] }
+        resetPolicy: { type: string, enum: [CALENDAR_MONTH, SUBSCRIPTION_PERIOD] }
+        periodStart: { $ref: "#/components/schemas/NullableTimestamp" }
+        periodEnd: { $ref: "#/components/schemas/NullableTimestamp" }
+        effectiveUntil: { $ref: "#/components/schemas/NullableTimestamp" }
+
+    EventHeaders:
+      type: object
+      additionalProperties: true
+      required:
+        - eventId
+        - eventType
+        - eventVersion
+        - aggregateType
+        - aggregateId
+        - occurredAt
+      properties:
+        eventId:
+          type: string
+          minLength: 1
+          description: Stable idempotency key for this event.
+        eventType:
+          type: string
+          minLength: 1
+        eventVersion:
+          type: integer
+          minimum: 1
+        aggregateType:
+          type: string
+          minLength: 1
+        aggregateId:
+          type: string
+          minLength: 1
+        occurredAt:
+          $ref: "#/components/schemas/Timestamp"
+        traceparent:
+          type: string
+          pattern: "^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$"
+          description: Optional W3C trace context propagated from the originating request.
+        X-Request-Id:
+          type: string
+          minLength: 1
+          description: Optional request correlation identifier.
+
+    Timestamp:
+      type: string
+      format: date-time
+      description: RFC 3339 date-time. See x-known-runtime-drift for legacy LocalDateTime publishers.
+
+    NullableString:
+      oneOf:
+        - type: string
+        - type: "null"
+
+    NullableTimestamp:
+      oneOf:
+        - $ref: "#/components/schemas/Timestamp"
+        - type: "null"
+
+    MonetaryAmount:
+      type: number
+      format: decimal
+      multipleOf: 0.01
+
+    NullableMonetaryAmount:
+      oneOf:
+        - $ref: "#/components/schemas/MonetaryAmount"
+        - type: "null"
+
+    AuthAuthorizationChangedPayload:
+      type: object
+      additionalProperties: false
+      required: [userId, status, roles, permissions, authorizationVersion, authorizationPolicyVersion, effectiveAt]
+      properties:
+        userId: { type: string, minLength: 1 }
+        status: { type: string, enum: [ACTIVE, BANNED] }
+        roles:
+          type: array
+          uniqueItems: true
+          items: { type: string, minLength: 1 }
+        permissions:
+          type: array
+          uniqueItems: true
+          items: { type: string, pattern: "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+$" }
+        authorizationVersion: { type: integer, format: int64, minimum: 1 }
+        authorizationPolicyVersion: { type: integer, format: int64, minimum: 1 }
+        effectiveAt:
+          $ref: "#/components/schemas/Timestamp"
+
+    CommerceOrderPaidPayload:
+      type: object
+      additionalProperties: false
+      required: [eventId, orderId, userId, totalAmount, originalAmount, discountAmount, items]
+      properties:
+        eventId: { type: string, minLength: 1 }
+        orderId: { type: string, minLength: 1 }
+        userId: { type: string, minLength: 1 }
+        totalAmount:
+          $ref: "#/components/schemas/MonetaryAmount"
+        originalAmount:
+          $ref: "#/components/schemas/MonetaryAmount"
+        discountAmount:
+          $ref: "#/components/schemas/MonetaryAmount"
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/CommerceOrderItem"
+
+    CommerceOrderItem:
+      type: object
+      additionalProperties: false
+      required: [courseId, title, price]
+      properties:
+        courseId: { type: string, minLength: 1 }
+        title: { type: string, minLength: 1 }
+        price:
+          $ref: "#/components/schemas/MonetaryAmount"
+
+    CommerceWishlistPayload:
+      type: object
+      additionalProperties: false
+      required: [eventId, userId, courseId, added]
+      properties:
+        eventId: { type: string, minLength: 1 }
+        userId: { type: string, minLength: 1 }
+        courseId: { type: string, minLength: 1 }
+        added: { type: boolean }
+
+    LearningEnrollmentGrantedPayload:
+      type: object
+      additionalProperties: false
+      required: [userId, courseId, grantedAt]
+      properties:
+        userId: { type: string, minLength: 1 }
+        courseId: { type: string, minLength: 1 }
+        grantedAt:
+          $ref: "#/components/schemas/Timestamp"
+
+    CourseSellabilityChangedPayload:
+      type: object
+      additionalProperties: false
+      required: [eventId, courseId, title, price, categoryId, instructorId, sellable, occurredAt]
+      properties:
+        eventId: { type: string, minLength: 1 }
+        courseId: { type: string, minLength: 1 }
+        title: { type: string, minLength: 1 }
+        price:
+          $ref: "#/components/schemas/MonetaryAmount"
+        categoryId: { type: string, minLength: 1 }
+        instructorId: { type: string, minLength: 1 }
+        sellable: { type: boolean }
+        occurredAt:
+          $ref: "#/components/schemas/Timestamp"
+
+    CourseTranscriptsChangedPayload:
+      type: object
+      additionalProperties: false
+      required: [eventId, courseId, reason, occurredAt]
+      properties:
+        eventId: { type: string, minLength: 1 }
+        courseId: { type: string, minLength: 1 }
+        reason:
+          type: string
+          enum: [PUBLISHED, UNARCHIVED, ARCHIVED, TRACK_CHANGED]
+        occurredAt:
+          $ref: "#/components/schemas/Timestamp"
+
+    LearningPathCheckoutRequestedPayload:
+      type: object
+      additionalProperties: false
+      required: [eventId, userId, courseId]
+      properties:
+        eventId: { type: string, minLength: 1 }
+        userId: { type: string, minLength: 1 }
+        courseId: { type: string, minLength: 1 }
+
+    CourseRecommendationEventPayload:
+      type: object
+      additionalProperties: false
+      required: [course, timestamp]
+      properties:
+        course:
+          $ref: "#/components/schemas/CourseRecommendationPayload"
+        timestamp:
+          $ref: "#/components/schemas/Timestamp"
+
+    CourseRecommendationPayload:
+      type: object
+      additionalProperties: false
+      required: [id, title, status]
+      properties:
+        id: { type: string, minLength: 1 }
+        title: { type: string, minLength: 1 }
+        description:
+          $ref: "#/components/schemas/NullableString"
+        category:
+          oneOf:
+            - $ref: "#/components/schemas/CourseCategory"
+            - type: "null"
+        instructor:
+          oneOf:
+            - $ref: "#/components/schemas/CourseInstructor"
+            - type: "null"
+        images:
+          type: array
+          items:
+            $ref: "#/components/schemas/CourseImage"
+        price:
+          $ref: "#/components/schemas/NullableMonetaryAmount"
+        discountedPrice:
+          $ref: "#/components/schemas/NullableMonetaryAmount"
+        discountRate:
+          oneOf:
+            - type: integer
+              format: int64
+            - type: "null"
+        rating:
+          oneOf:
+            - type: number
+              format: double
+            - type: "null"
+        enrollmentCount:
+          type: integer
+          format: int64
+          minimum: 0
+        isInSubscription: { type: boolean }
+        # Additive access contract for the F1 compatibility window. Consumers
+        # must prefer these fields and fall back to isInSubscription only for
+        # legacy events that do not carry them.
+        accessModel:
+          oneOf:
+            - type: string
+              enum: [FREE, PURCHASE_ONLY, SUBSCRIPTION_ONLY, PURCHASE_OR_SUBSCRIPTION]
+            - type: "null"
+        subscriptionFeatureKey:
+          $ref: "#/components/schemas/NullableString"
+        duration:
+          oneOf:
+            - type: integer
+              format: int64
+              minimum: 0
+            - type: "null"
+        hasCertificate: { type: boolean }
+        certificateTitle:
+          $ref: "#/components/schemas/NullableString"
+        status:
+          type: string
+          enum: [DRAFT, PUBLISHED, ARCHIVED]
+        publishStatus:
+          oneOf:
+            - type: string
+              enum: [WAITING_APPROVAL, PUBLISHED, REJECTED]
+            - type: "null"
+        sections:
+          oneOf:
+            - type: array
+              items:
+                $ref: "#/components/schemas/CurriculumSection"
+            - type: "null"
+        createdAt:
+          $ref: "#/components/schemas/NullableTimestamp"
+        updatedAt:
+          $ref: "#/components/schemas/NullableTimestamp"
+
+    CourseCategory:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          $ref: "#/components/schemas/NullableString"
+        name:
+          $ref: "#/components/schemas/NullableString"
+
+    CourseInstructor:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          $ref: "#/components/schemas/NullableString"
+        name:
+          $ref: "#/components/schemas/NullableString"
+        email:
+          $ref: "#/components/schemas/NullableString"
+        gender:
+          oneOf:
+            - type: string
+              enum: [MALE, FEMALE]
+            - type: "null"
+        avatarUrl:
+          $ref: "#/components/schemas/NullableString"
+
+    CourseImage:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          $ref: "#/components/schemas/NullableString"
+        imageUrl:
+          $ref: "#/components/schemas/NullableString"
+
+    CurriculumSection:
+      type: object
+      additionalProperties: false
+      required: [id, title]
+      properties:
+        id: { type: string, minLength: 1 }
+        title: { type: string, minLength: 1 }
+        description:
+          $ref: "#/components/schemas/NullableString"
+        duration:
+          oneOf:
+            - type: integer
+              format: int64
+              minimum: 0
+            - type: "null"
+        orderIndex:
+          oneOf:
+            - type: integer
+            - type: "null"
+        lessons:
+          type: array
+          items:
+            $ref: "#/components/schemas/CurriculumLesson"
+
+    CurriculumLesson:
+      type: object
+      additionalProperties: false
+      required: [id, title]
+      properties:
+        id: { type: string, minLength: 1 }
+        title: { type: string, minLength: 1 }
+        duration:
+          oneOf:
+            - type: integer
+              format: int64
+              minimum: 0
+            - type: "null"
+        lessonType:
+          oneOf:
+            - type: string
+              enum: [VIDEO, ARTICLE, QUIZ, ASSIGNMENT]
+            - type: "null"
+        orderIndex:
+          oneOf:
+            - type: integer
+            - type: "null"
+        isPreview:
+          oneOf:
+            - type: boolean
+            - type: "null"
+        prerequisiteIds:
+          type: array
+          items: { type: string }
+        createdAt:
+          $ref: "#/components/schemas/NullableTimestamp"
+        updatedAt:
+          $ref: "#/components/schemas/NullableTimestamp"
+
+    CourseContentPublishedPayload:
+      type: object
+      additionalProperties: false
+      required: [courseId, courseTitle, instructorId]
+      properties:
+        courseId: { type: string, minLength: 1 }
+        courseTitle: { type: string, minLength: 1 }
+        instructorId: { type: string, minLength: 1 }
+        instructorIds:
+          type: array
+          description: Optional publication-time snapshot of active course instructors.
+          uniqueItems: true
+          items: { type: string, minLength: 1 }
+
+    CourseApprovalRequestedPayload:
+      type: object
+      additionalProperties: false
+      required: [courseId, courseTitle, instructorId]
+      properties:
+        courseId: { type: string, minLength: 1 }
+        courseTitle: { type: string, minLength: 1 }
+        instructorId: { type: string, minLength: 1 }
+
+    CourseCollaboratorInvitedPayload:
+      type: object
+      additionalProperties: false
+      description: Ids and the course title only; the consumer looks names and the email up itself.
+      required: [courseId, courseTitle, inviterId, inviteeId, role, invitedAt]
+      properties:
+        courseId: { type: string, minLength: 1 }
+        courseTitle: { type: string, minLength: 1 }
+        inviterId: { type: string, minLength: 1 }
+        inviteeId: { type: string, minLength: 1 }
+        role: { type: string, enum: [MANAGER, EDITOR] }
+        invitedAt:
+          $ref: "#/components/schemas/Timestamp"
+
+    CourseCompletedPayload:
+      type: object
+      additionalProperties: false
+      required: [userId, courseId, courseTitle, occurredAt]
+      properties:
+        userId: { type: string, minLength: 1 }
+        courseId: { type: string, minLength: 1 }
+        courseTitle: { type: string, minLength: 1 }
+        occurredAt:
+          $ref: "#/components/schemas/Timestamp"
+
+    DailyReminderDuePayload:
+      type: object
+      additionalProperties: false
+      required: [userId, goalType, targetValue, currentValue, targetItemId, occurredAt]
+      properties:
+        userId: { type: string, minLength: 1 }
+        goalType:
+          type: string
+          enum: [XP, LEARNING_ITEMS_COMPLETED, VIDEOS_COMPLETED, QUIZZES_PASSED, ASSIGNMENTS_SUBMITTED, SPECIFIC_LESSON_COMPLETED]
+        targetValue: { type: integer, minimum: 0 }
+        currentValue: { type: integer, minimum: 0 }
+        targetItemId:
+          $ref: "#/components/schemas/NullableString"
+        occurredAt:
+          $ref: "#/components/schemas/Timestamp"
+
+    StudyReminderDuePayload:
+      type: object
+      additionalProperties: false
+      description: At most one per learner and day; the eventId is study-reminder:{userId}:{reminderDate}.
+      required: [userId, reason, title, body, actionUrl, writtenBy, reminderDate, occurredAt]
+      properties:
+        userId: { type: string, minLength: 1 }
+        reason:
+          type: string
+          enum: [PLAN_SESSION_PENDING, STREAK_AT_RISK, REVIEWS_DUE, DAILY_GOAL_PENDING, INACTIVE]
+        title: { type: string, minLength: 1, maxLength: 200 }
+        body: { type: string, minLength: 1, maxLength: 500 }
+        actionUrl:
+          type: string
+          description: A cinx-web route, /learning/{courseId}?lessonId={lessonId}, /review or /week.
+        writtenBy:
+          type: string
+          enum: [TEMPLATE, AI]
+        reminderDate:
+          type: string
+          format: date
+          description: The day in Asia/Ho_Chi_Minh.
+        occurredAt:
+          $ref: "#/components/schemas/Timestamp"
+
+    SubtitleJobFinishedPayload:
+      type: object
+      additionalProperties: false
+      description: One per job and outcome; the eventId is subtitle-job:{jobId}:{outcome}. Sent only when a person started the job.
+      required: [jobId, userId, courseId, lessonId, languageCode, displayName, outcome, warningCount, actionUrl, occurredAt]
+      properties:
+        jobId: { type: string, minLength: 1 }
+        userId: { type: string, minLength: 1, description: The instructor who started the job. }
+        courseId: { type: string, minLength: 1 }
+        lessonId: { type: string, minLength: 1, description: The lesson's stable id. }
+        lessonTitle:
+          $ref: "#/components/schemas/NullableString"
+        languageCode: { type: string, minLength: 1 }
+        displayName: { type: string, minLength: 1 }
+        outcome:
+          type: string
+          enum: [REVIEW_REQUIRED, FAILED]
+        warningCount: { type: integer, minimum: 0, description: Quality warnings on the track; 0 for FAILED. }
+        actionUrl:
+          type: string
+          description: The cinx-web editor route, /instructor/courses/{courseId}/edit?lesson={lessonId}.
+        occurredAt:
+          $ref: "#/components/schemas/Timestamp"
+
+    CertificateRequestedPayload:
+      type: object
+      additionalProperties: false
+      required: [requestId, userId, userName, courseId, courseTitle, instructorId, instructorEmail, occurredAt]
+      properties:
+        requestId: { type: string, minLength: 1 }
+        userId: { type: string, minLength: 1 }
+        userName:
+          $ref: "#/components/schemas/NullableString"
+        courseId: { type: string, minLength: 1 }
+        courseTitle: { type: string, minLength: 1 }
+        instructorId:
+          $ref: "#/components/schemas/NullableString"
+        instructorEmail:
+          $ref: "#/components/schemas/NullableString"
+        occurredAt:
+          $ref: "#/components/schemas/Timestamp"
+
+    CertificateApprovedPayload:
+      type: object
+      additionalProperties: false
+      required: [requestId, userId, userName, userEmail, courseId, courseTitle, certificateUrl, occurredAt]
+      properties:
+        requestId: { type: string, minLength: 1 }
+        userId: { type: string, minLength: 1 }
+        userName: { type: string, minLength: 1 }
+        userEmail: { type: string, format: email }
+        courseId: { type: string, minLength: 1 }
+        courseTitle: { type: string, minLength: 1 }
+        certificateUrl: { type: string, minLength: 1 }
+        occurredAt:
+          $ref: "#/components/schemas/Timestamp"
+
+    CourseReviewCreatedPayload:
+      type: object
+      additionalProperties: false
+      required: [eventId, reviewId, courseId, reviewerUserId, rating, content, occurredAt]
+      properties:
+        eventId: { type: string, minLength: 1 }
+        reviewId: { type: string, minLength: 1 }
+        courseId: { type: string, minLength: 1 }
+        reviewerUserId: { type: string, minLength: 1 }
+        rating: { type: number, format: double }
+        content: { type: string }
+        occurredAt:
+          $ref: "#/components/schemas/Timestamp"
+
+    CourseQuestionCreatedPayload:
+      type: object
+      additionalProperties: false
+      required: [eventId, questionId, courseId, lessonId, askedByUserId, questionTitle, occurredAt]
+      properties:
+        eventId: { type: string, minLength: 1 }
+        questionId: { type: string, minLength: 1 }
+        courseId: { type: string, minLength: 1 }
+        lessonId:
+          $ref: "#/components/schemas/NullableString"
+        askedByUserId: { type: string, minLength: 1 }
+        questionTitle: { type: string, minLength: 1 }
+        occurredAt:
+          $ref: "#/components/schemas/Timestamp"
+
+    CourseAnswerCreatedPayload:
+      type: object
+      additionalProperties: false
+      required: [eventId, answerId, questionId, courseId, questionAuthorId, parentAnswerAuthorId, answeredByUserId, occurredAt]
+      properties:
+        eventId: { type: string, minLength: 1 }
+        answerId: { type: string, minLength: 1 }
+        questionId: { type: string, minLength: 1 }
+        courseId: { type: string, minLength: 1 }
+        questionAuthorId: { type: string, minLength: 1 }
+        parentAnswerAuthorId:
+          $ref: "#/components/schemas/NullableString"
+        answeredByUserId: { type: string, minLength: 1 }
+        occurredAt:
+          $ref: "#/components/schemas/Timestamp"
+
+    SubtitleGenerateRequestedPayload:
+      type: object
+      additionalProperties: false
+      required: [jobId, courseId, lessonId, videoFileKey, targetLanguageCode, displayName, expectedOutputFileKey]
+      properties:
+        jobId: { type: string, minLength: 1 }
+        courseId: { type: string, minLength: 1 }
+        lessonId: { type: string, minLength: 1 }
+        videoFileKey: { type: string, minLength: 1 }
+        targetLanguageCode: { type: string, minLength: 1 }
+        displayName: { type: string, minLength: 1 }
+        expectedOutputFileKey: { type: string, minLength: 1 }
+
+    SubtitleTranslateRequestedPayload:
+      type: object
+      additionalProperties: false
+      required:
+        - jobId
+        - courseId
+        - lessonId
+        - videoFileKey
+        - sourceSubtitleId
+        - sourceLanguageCode
+        - sourceFileKey
+        - sourceFileUrl
+        - targetLanguageCode
+        - displayName
+        - expectedOutputFileKey
+      properties:
+        jobId: { type: string, minLength: 1 }
+        courseId: { type: string, minLength: 1 }
+        lessonId: { type: string, minLength: 1 }
+        videoFileKey: { type: string, minLength: 1 }
+        sourceSubtitleId: { type: string, minLength: 1 }
+        sourceLanguageCode: { type: string, minLength: 1 }
+        sourceFileKey: { type: string, minLength: 1 }
+        sourceFileUrl: { type: string, minLength: 1 }
+        targetLanguageCode: { type: string, minLength: 1 }
+        displayName: { type: string, minLength: 1 }
+        expectedOutputFileKey: { type: string, minLength: 1 }
+
+    UserInstructorVerifiedPayload:
+      type: object
+      additionalProperties: false
+      required: [userId, role, to, subject, body]
+      properties:
+        userId: { type: string, minLength: 1 }
+        role: { type: string, enum: [INSTRUCTOR] }
+        to: { type: string, format: email }
+        subject: { type: string, minLength: 1 }
+        body: { type: string, minLength: 1 }
+
+    UserInstructorRejectedPayload:
+      type: object
+      additionalProperties: false
+      required: [userId, to, subject, body]
+      properties:
+        userId: { type: string, minLength: 1 }
+        to: { type: string, format: email }
+        subject: { type: string, minLength: 1 }
+        body: { type: string, minLength: 1 }
+
+    UserInstructorTerminatedPayload:
+      type: object
+      additionalProperties: false
+      required: [userId, to, subject, body]
+      properties:
+        userId: { type: string, minLength: 1 }
+        to: { type: string, format: email }
+        subject: { type: string, minLength: 1 }
+        body: { type: string, minLength: 1 }
+
+    UserInstructorPendingPayload:
+      type: object
+      additionalProperties: false
+      required: [userId, userIds, title, message, instructorEmail]
+      properties:
+        userId: { type: string, minLength: 1 }
+        userIds:
+          type: array
+          minItems: 1
+          items: { type: string, minLength: 1 }
+        title: { type: string, minLength: 1 }
+        message: { type: string, minLength: 1 }
+        instructorEmail: { type: string, format: email }
+
+    UserInstructorApplicationSubmittedPayload:
+      type: object
+      additionalProperties: false
+      required: [eventId, userId, email, cvUrl, submittedAt]
+      properties:
+        eventId:
+          type: string
+          minLength: 1
+          description: Payload-local ID currently generated independently from the standard eventId header.
+        userId: { type: string, minLength: 1 }
+        email: { type: string, format: email }
+        cvUrl: { type: string }
+        submittedAt:
+          $ref: "#/components/schemas/Timestamp"
+
+    UserLearningProfileUpdatedPayload:
+      type: object
+      additionalProperties: false
+      description: >-
+        A snapshot (P1-06). Every answer may be null. With personalizationConsent false a consumer must not use the
+        answers or the topics to personalize.
+      required: [userId, categoryIds, personalizationConsent, occurredAt]
+      properties:
+        userId: { type: string, minLength: 1 }
+        goal:
+          oneOf:
+            - type: string
+              enum: [CAREER_START, SKILL_UP, CERTIFICATE, PERSONAL]
+            - type: "null"
+        level:
+          oneOf:
+            - type: string
+              enum: [BEGINNER, BASIC, ADVANCED]
+            - type: "null"
+        minutesPerDay:
+          oneOf:
+            - type: integer
+              enum: [15, 30, 45, 60, 90, 120]
+            - type: "null"
+        contentLanguage:
+          oneOf:
+            - type: string
+              enum: [VI, EN, BOTH]
+            - type: "null"
+        categoryIds:
+          type: array
+          uniqueItems: true
+          items: { type: string, minLength: 1 }
+        personalizationConsent: { type: boolean }
+        usageAnalyticsConsent:
+          type: boolean
+          description: >-
+            The "Thống kê sử dụng" switch (P0-07). Added later, so an older producer may leave it out; a consumer
+            reads a missing value as true. With false, reporting drops the learner's product events.
+        occurredAt:
+          $ref: "#/components/schemas/Timestamp"
+
+    UserPreferenceUpdatedPayload:
+      type: object
+      additionalProperties: false
+      required: [payload]
+      properties:
+        payload:
+          type: object
+          additionalProperties: false
+          required: [userId, categoryIds]
+          properties:
+            userId: { type: string, minLength: 1 }
+            categoryIds:
+              type: array
+              uniqueItems: true
+              items: { type: string, minLength: 1 }
+
+    UserProfileOnboardedPayload:
+      type: object
+      additionalProperties: false
+      required: [userId, keycloakSubject, email]
+      properties:
+        userId: { type: string, minLength: 1 }
+        keycloakSubject: { type: string, minLength: 1 }
+        email:
+          $ref: "#/components/schemas/NullableString"
+
+    UserPolicyPublishedPayload:
+      type: object
+      additionalProperties: false
+      required: [documentId, title, sourceType, sourceUrl, content, versionNumber, publishedAt]
+      properties:
+        documentId: { type: string, minLength: 1 }
+        title: { type: string, minLength: 1 }
+        sourceType: { type: string, enum: [POLICY] }
+        sourceUrl: { type: string, minLength: 1 }
+        content: { type: string, minLength: 1 }
+        versionNumber: { type: integer, minimum: 1 }
+        publishedAt:
+          $ref: "#/components/schemas/Timestamp"
+
+    UserPolicyArchivedPayload:
+      type: object
+      additionalProperties: false
+      required: [documentId, sourceType, sourceUrl, publishedAt]
+      properties:
+        documentId: { type: string, minLength: 1 }
+        sourceType: { type: string, enum: [POLICY] }
+        sourceUrl: { type: string, minLength: 1 }
+        publishedAt:
+          $ref: "#/components/schemas/Timestamp"
+
+    SubtitleJobProgressPayload:
+      type: object
+      additionalProperties: false
+      required: [jobId, progressPercent]
+      properties:
+        jobId: { type: string, minLength: 1 }
+        progressPercent: { type: integer, minimum: 0, maximum: 99 }
+
+    SubtitleJobCompletedPayload:
+      type: object
+      additionalProperties: false
+      required:
+        - jobId
+        - outputFileKey
+        - outputFileUrl
+        - fileName
+        - fileType
+        - fileSize
+        - languageCode
+        - displayName
+        - wordConfidenceFileKey
+        - wordConfidenceFileUrl
+      properties:
+        jobId: { type: string, minLength: 1 }
+        outputFileKey: { type: string, minLength: 1 }
+        outputFileUrl: { type: string, minLength: 1 }
+        fileName: { type: string, minLength: 1 }
+        fileType: { type: string, enum: [text/vtt] }
+        fileSize: { type: integer, format: int64, minimum: 1 }
+        languageCode: { type: string, minLength: 1 }
+        displayName: { type: string, minLength: 1 }
+        wordConfidenceFileKey:
+          $ref: "#/components/schemas/NullableString"
+        wordConfidenceFileUrl:
+          $ref: "#/components/schemas/NullableString"
+        quality:
+          $ref: "#/components/schemas/SubtitleQualityReport"
+
+    SubtitleQualityReport:
+      type: object
+      description: >-
+        Optional (workers before it send none). Summary numbers only, never subtitle text; learning stores it
+        on the track for the instructor's review and drops one larger than 8 KB.
+      required: [schemaVersion, thresholds, metrics, warnings]
+      properties:
+        schemaVersion: { type: integer, enum: [1] }
+        thresholds:
+          type: object
+          properties:
+            maxLineChars: { type: integer }
+            maxLines: { type: integer }
+            maxCps: { type: number }
+            minSeconds: { type: number }
+        metrics:
+          type: object
+          description: Cue count, CPS percentiles and over-limit share, line length, durations, overlaps, cues starting backwards, orphan cues.
+        doubtfulWordShare:
+          description: Share of recognised words below confidence 0.5; generate jobs only.
+          oneOf:
+            - type: number
+            - type: "null"
+        languageProbability:
+          description: The ASR's confidence in the detected language; generate jobs only.
+          oneOf:
+            - type: number
+            - type: "null"
+        warnings:
+          type: array
+          items:
+            type: string
+            enum: [CPS_HIGH, LINE_TOO_LONG, CUE_TOO_SHORT, OVERLAP, LOW_CONFIDENCE, LANGUAGE_UNCERTAIN]
+
+    SubtitleJobFailedPayload:
+      type: object
+      additionalProperties: false
+      required: [jobId, errorCode, errorMessage]
+      properties:
+        jobId: { type: string, minLength: 1 }
+        errorCode: { type: string, minLength: 1 }
+        errorMessage: { type: string, maxLength: 4000 }
+
+    AssistantActionDecidedPayload:
+      type: object
+      additionalProperties: false
+      description: An action the assistant proposed reached its final state; the user is told it was done or not.
+      required: [pendingActionId, type, status, actorUserId, occurredAt]
+      properties:
+        pendingActionId: { type: string, minLength: 1 }
+        type: { type: string, minLength: 1, description: "Action type, for example learning_path.create." }
+        status: { type: string, enum: [EXECUTED, FAILED, REJECTED, EXPIRED] }
+        actorUserId: { type: string, minLength: 1, description: The user the agent acted for. }
+        decidedBy: { type: [string, "null"], description: The approver; null when the action expired. }
+        sessionId: { type: [string, "null"] }
+        errorCode: { type: [string, "null"] }
+        occurredAt:
+          $ref: "#/components/schemas/Timestamp"
