@@ -33,6 +33,20 @@ services:
     - ./env/dev/rabbitmq.env
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
+  eureka-server:
+    container_name: eureka-server
+    ports:
+    - "8761:8761"
+    networks:
+    - cinx-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8761/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    build: ./eureka
+    image: cinx-eureka:local
 networks:
   cinx-network:
     driver: bridge

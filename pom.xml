@@ -17,6 +17,7 @@
     <description>Parent POM for Cinx Microservices</description>
 
     <modules>
+        <module>eureka</module>
         <module>common-security</module>
         <module>common</module>
     </modules>
