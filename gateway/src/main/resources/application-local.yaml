@@ -1,0 +1,34 @@
+spring:
+  config:
+    import: optional:file:../env/local.env[.properties]
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+  # registered as localhost, so a laptop that changes networks does not leave the registry on an old IP
+  instance:
+    hostname: localhost
+    prefer-ip-address: false
+security:
+  keycloak:
+    issuer-uri: http://localhost:8180/realms/cinx
+    jwk-set-uri: http://localhost:8180/realms/cinx/protocol/openid-connect/certs
+    audience: cinx-api
+keycloak:
+  base-url: http://localhost:8180
+recommendation:
+  base-url: http://localhost:8090
+assistant:
+  base-url: http://localhost:8092
+cors:
+  allowed-origins: http://localhost:[*]
+cinx:
+  security:
+    authorization-freshness:
+      # on the host, Keycloak and auth answer on localhost; application.yaml defaults to their Docker names
+      auth-base-url: ${AUTH_INTERNAL_BASE_URL:http://localhost:8888}
+      token-uri: ${KEYCLOAK_SERVICE_TOKEN_URI:http://localhost:8180/realms/cinx/protocol/openid-connect/token}
