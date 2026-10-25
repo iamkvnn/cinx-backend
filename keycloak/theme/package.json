@@ -1,0 +1,32 @@
+{
+  "name": "cinx-keycloak-theme",
+  "private": true,
+  "version": "0.0.0",
+  "description": "The cinx Keycloak login and email theme (Keycloakify)",
+  "type": "module",
+  "packageManager": "pnpm@11.18.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "build-keycloak-theme": "pnpm build && keycloakify build",
+    "typecheck": "tsc",
+    "postinstall": "keycloakify sync-extensions"
+  },
+  "dependencies": {
+    "@fontsource-variable/plus-jakarta-sans": "^5.3.0",
+    "@keycloakify/email-native": "~260007.0.0",
+    "@rive-app/canvas-lite": "2.44.0",
+    "@rive-app/react-canvas-lite": "^4.36.0",
+    "keycloakify": "11.16.1",
+    "lucide-react": "^1.52.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "typescript": "~6.0.3",
+    "vite": "^8.3.1"
+  }
+}
