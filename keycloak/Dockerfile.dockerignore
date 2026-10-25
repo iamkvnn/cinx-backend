@@ -1,0 +1,6 @@
+# The Keycloak image is built from the repository root; only the theme sources reach it
+*
+!keycloak/theme/
+keycloak/theme/node_modules/
+keycloak/theme/dist/
+keycloak/theme/dist_keycloak/

@@ -47,6 +47,29 @@ services:
       interval: 10s
       timeout: 3s
       retries: 5
+  keycloak:
+    image: cinx-keycloak:26.6.1
+    build:
+      context: .
+      dockerfile: keycloak/Dockerfile
+    container_name: keycloak
+    command: start-dev --import-realm
+    environment:
+      KC_DB: mysql
+      KC_DB_URL: jdbc:mysql://mysql:3306/keycloakdb
+      KC_DB_USERNAME: root
+      KC_HEALTH_ENABLED: "true"
+    env_file:
+      - ./env/dev/keycloak.env
+    ports:
+      - "8180:8080"
+    networks:
+      - cinx-network
+    depends_on:
+      mysql:
+        condition: service_healthy
+    volumes:
+      - ./keycloak/realm:/opt/keycloak/data/import:ro
   eureka-server:
     container_name: eureka-server
     ports:
