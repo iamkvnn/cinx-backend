@@ -1,0 +1,18 @@
+package com.cinx.learning.catalog.application.query;
+
+import com.cinx.learning.shared.domain.CourseMembershipRole;
+
+import java.time.LocalDateTime;
+
+/** A pending co-instructor invitation addressed to the caller. */
+public record InvitationView(
+        String courseId,
+        String courseTitle,
+        String thumbnailUrl,
+        CourseMembershipRole role,
+        LocalDateTime invitedAt,
+        Inviter invitedBy
+) {
+    public record Inviter(String id, String name, String avatarUrl) {
+    }
+}
