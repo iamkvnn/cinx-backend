@@ -1,0 +1,7 @@
+package com.cinx.auth.identity.application;
+
+public class KeycloakSyncException extends RuntimeException {
+    public KeycloakSyncException(String message, Throwable cause) {
+        super(message, cause);
+    }
+}
