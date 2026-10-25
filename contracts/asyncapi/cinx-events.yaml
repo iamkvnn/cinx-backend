@@ -2159,7 +2159,7 @@ components:
         accessModel:
           oneOf:
             - type: string
-              enum: [FREE, PURCHASE_ONLY, SUBSCRIPTION_ONLY, PURCHASE_OR_SUBSCRIPTION]
+              enum: [PURCHASE_ONLY, SUBSCRIPTION_ONLY, PURCHASE_OR_SUBSCRIPTION]
             - type: "null"
         subscriptionFeatureKey:
           $ref: "#/components/schemas/NullableString"
