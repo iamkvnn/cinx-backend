@@ -117,6 +117,24 @@ services:
     - ./env/dev/auth.env
     build: ./auth
     image: cinx-auth:local
+  learning:
+    container_name: learning-service
+    networks:
+    - cinx-network
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      eureka-server:
+        condition: service_started
+    env_file:
+    - ./env/dev/common.env
+    - ./env/dev/learning.env
+    build:
+      context: .
+      dockerfile: learning/Dockerfile
+    image: cinx-learning:local
   user:
     container_name: user-service
     networks:

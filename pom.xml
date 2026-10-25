@@ -23,6 +23,7 @@
         <module>common-security</module>
         <module>common</module>
         <module>user</module>
+        <module>learning</module>
     </modules>
 
     <properties>
