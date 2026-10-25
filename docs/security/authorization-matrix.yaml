@@ -1,0 +1,2915 @@
+$schema: ./authorization-matrix.schema.json
+schemaVersion: "1.0"
+status: proposed
+lastReviewed: "2026-07-31"
+owners:
+  securityModel: auth
+  operationPolicy: owning-service
+
+coverage:
+  current: critical-boundaries-and-target-subscription-flows
+  releaseRequirement: every-public-internal-websocket-and-provider-operation
+  rule: >
+    A route not represented by an operation or an explicitly referenced
+    operation family is not ready for release.
+
+defaults:
+  decision: deny
+  principalClaim: uid
+  principalFallbackClaim: sub
+  principalFallbackAllowedOperations:
+    - user.profile-onboard-self
+  requiredClaimsForOrdinaryUserOperations:
+    - uid
+  userAudience: cinx-api
+  userTokenKind: user
+  serviceTokenKind: service
+  missingAttributeDecision: deny
+  malformedClaimDecision: deny
+  unauthenticatedStatus: 401
+  forbiddenStatus: 403
+  concealedResourceStatus: 404
+  quotaExceededStatus: 429
+  mfaPolicy:
+    requiredAcr: urn:cinx:loa:2
+    allowedAmr: [otp, hwk, webauthn]
+    maxAuthAgeSeconds: 900
+    insufficientCode: MFA_STEP_UP_REQUIRED
+  ownershipRule: >
+    A self or own permission never proves ownership. The owning service
+    resolves the relationship from its own database or trusted projection.
+  commercialRule: >
+    Roles and permissions never encode a plan. Feature entitlement and quota
+    are evaluated after authentication and security authorization.
+
+routeEncoding:
+  method: >
+    Uppercase HTTP method. Multiple methods in one policy use a pipe-separated
+    scalar such as GET|POST; the validator must split it before matching.
+  path: >
+    Spring-style path variables use {name}; /** is a family wildcard.
+  matchRule: >
+    A concrete controller method must match exactly one operation. Zero or
+    multiple matches fail validation; there is no most-specific-policy
+    precedence.
+  schemaValidation: required-before-implementation-complete
+
+authorityMapping:
+  roles:
+    claim: roles
+    prefix: ROLE_
+  permissions:
+    claim: permissions
+    prefix: PERM_
+  oauthScopes:
+    claim: scope
+    prefix: SCOPE_
+  notes:
+    - ROLE_* and PERM_* definitions come from the canonical authorization catalog.
+    - Keycloak realm composites are generated or validated from that catalog.
+    - User-to-role grants and account status are authored in the auth database.
+    - SCOPE_* is OAuth protocol scope, not a replacement for application permission.
+
+policyCheckTypes:
+  relationship:
+    - self
+    - self-or-any
+    - self-and-notification-owner
+    - order-owner-or-any
+    - course-instructor-unless-any
+    - active-course-membership
+    - course-instructor-or-learner
+    - submission-course-instructor
+    - course-team-member
+    - session-owner
+    - authenticated-user-destination
+  resourceAttribute:
+    - published
+    - preview
+    - active
+    - workflow-state
+    - account-state
+  entitlement:
+    - feature-grant
+    - course-access
+  quota:
+    - hard-counter
+    - reservation
+
+operations:
+  - id: auth.account-read-any
+    owner: auth
+    transport: http
+    exposure: user
+    routes:
+      - method: GET
+        path: /api/v1/identity/accounts/{userId}
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAll: [auth.account.read.any]
+      relationship: null
+      attributes: []
+      entitlement: null
+      quota: null
+    concealUnauthorizedResource: true
+    audit: security
+
+  - id: auth.account-suspend-any
+    owner: auth
+    transport: http
+    exposure: user
+    routes:
+      - method: POST
+        path: /api/v1/identity/accounts/{userId}/suspend
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+      mfaRequired: true
+    authorization:
+      permissionsAll: [auth.account.suspend.any]
+      relationship: null
+      attributes:
+        - valid account-state transition
+        - break-glass and last-admin protections apply
+      entitlement: null
+      quota: null
+    audit: security-critical
+
+  - id: auth.account-reactivate-any
+    owner: auth
+    transport: http
+    exposure: user
+    routes:
+      - method: POST
+        path: /api/v1/identity/accounts/{userId}/reactivate
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+      mfaRequired: true
+    authorization:
+      permissionsAll: [auth.account.reactivate.any]
+      relationship: null
+      attributes:
+        - valid account-state transition
+        - break-glass and last-admin protections apply
+      entitlement: null
+      quota: null
+    audit: security-critical
+
+  - id: auth.role-assign-any
+    owner: auth
+    transport: http
+    exposure: user
+    routes:
+      - method: PUT
+        path: /api/v1/identity/accounts/{userId}/roles
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+      mfaRequired: true
+    authorization:
+      permissionsAll: [auth.role.assign.any]
+      relationship: null
+      attributes:
+        - requested roles are application roles from the allowlist
+        - caller cannot grant a role outside its delegation policy
+        - assignment expiry and reason are validated
+      entitlement: null
+      quota: null
+    audit: security-critical
+
+  - id: auth.permission-members-internal
+    owner: auth
+    transport: http
+    exposure: internal
+    routes:
+      - method: GET
+        path: /internal/identity/permissions/{permission}/user-ids
+    authentication:
+      required: true
+      tokenKind: service
+      audiences: [cinx-auth-internal]
+      allowedClients:
+        - cinx-notification-service
+    authorization:
+      permissionsAll: [auth.internal.permission-members.read]
+      relationship: null
+      attributes:
+        - requested permission is in the notification-recipient allowlist
+      entitlement: null
+      quota: null
+    audit: security
+
+  - id: auth.authorization-state-internal
+    owner: auth
+    transport: http
+    exposure: internal
+    routes:
+      - method: GET
+        path: /internal/identity/accounts/{userId}/authorization-state
+    authentication:
+      required: true
+      tokenKind: service
+      audiences: [cinx-auth-internal]
+      allowedClients:
+        - cinx-gateway-service
+        - cinx-user-service
+        - cinx-commerce-service
+        - cinx-learning-service
+        - cinx-notification-service
+        - cinx-reporting-service
+        - cinx-recommendation-service
+        - cinx-assistant-service
+    authorization:
+      permissionsAll: [auth.internal.authorization-state.read]
+      relationship: null
+      attributes:
+        - response is the minimal status, roles and monotonic authorization version for one user
+        - caller uses it only for revocation or plan-eligibility projection rehydration
+      entitlement: null
+      quota: null
+    audit: security
+
+  - id: user.profile-onboard-self
+    owner: user
+    transport: http
+    exposure: user
+    routes:
+      - method: POST
+        path: /api/v1/profiles/me/onboarding
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+      requiredClaims: [sub]
+      uidMayBeAbsent: true
+    authorization:
+      permissionsAll: []
+      relationship: self
+      attributes:
+        - this is the only permissionless authenticated onboarding exception
+        - first-token identity is derived from sub when uid is not present
+        - body cannot select or grant an authorization role
+        - instructor application is stored as workflow state
+        - acceptedPolicyIds must be published policies and cover each published TERMS and PRIVACY type; the agreement is stored in policy_acceptance
+        - preferredCategoryIds are published as the user.preference.updated event for the new profile only
+        - the optional learningProfile (goal, level, minutesPerDay, contentLanguage) and the topics are stored as the learner's learning profile; an empty learningProfile records the step as skipped
+      entitlement: null
+      quota: null
+    idempotency:
+      required: true
+      key: authenticated-user-and-request-fingerprint
+    audit: business
+
+  - id: user.learning-profile-self
+    owner: user
+    transport: http
+    exposure: user
+    routes:
+      - method: GET
+        path: /api/v1/profiles/me/learning-profile
+      - method: PUT
+        path: /api/v1/profiles/me/learning-profile
+      - method: POST
+        path: /api/v1/profiles/me/learning-profile/skip
+      - method: PUT
+        path: /api/v1/profiles/me/preferred-categories
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAny: [user.profile.read.self, user.profile.update.self]
+      relationship: self
+      attributes:
+        - GET needs user.profile.read.self; PUT, skip and preferred-categories need user.profile.update.self; the profile is always the JWT subject's own
+        - minutesPerDay is one of 15, 30, 45, 60, 90, 120; at most 20 topics; a write publishes user.learning-profile.updated, and user.preference.updated when the topics changed
+        - personalizationConsent false means no service may use the profile to personalize; the learner's own study-plan form may still be pre-filled from it
+        - the assistant reads GET with the learner's exchanged token (audience cinx-api)
+      entitlement: null
+      quota: null
+    audit: none
+
+  - id: user.profile-read-self
+    owner: user
+    transport: http
+    exposure: user
+    routes:
+      - method: GET
+        path: /api/v1/profiles/me
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAll: [user.profile.read.self]
+      relationship: self
+      attributes: []
+      entitlement: null
+      quota: null
+    audit: none
+
+  - id: user.profile-avatar-upload-self
+    owner: user
+    transport: http
+    exposure: user
+    routes:
+      - method: GET
+        path: /api/v1/profiles/upload/presigned-url
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAll: [user.profile.update.self]
+      relationship: self
+      attributes:
+        - only image/png, image/jpeg and image/webp are signed; any other contentType answers 400
+        - the object key is generated by the service under avatars/, never chosen by the caller
+      entitlement: null
+      quota: null
+    audit: none
+
+  - id: user.profile-read-any
+    owner: user
+    transport: http
+    exposure: user
+    routes:
+      - method: GET
+        path: /api/v1/admin/profiles/{userId}
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAll: [user.profile.read.any]
+      relationship: null
+      attributes:
+        - response fields are reduced for non-self callers
+      entitlement: null
+      quota: null
+    concealUnauthorizedResource: true
+    audit: conditional
+
+  - id: user.instructor-apply-self
+    owner: user
+    transport: http
+    exposure: user
+    routes:
+      - method: POST
+        path: /api/v1/instructor-applications
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAll: [user.instructor.apply.self]
+      relationship: self
+      attributes:
+        - no active or pending application exists
+        - account is active
+      entitlement: null
+      quota: null
+    audit: business
+
+  - id: user.instructor-review-any
+    owner: user
+    transport: http
+    exposure: user
+    routes:
+      - method: POST
+        path: /api/v1/instructor-applications/{applicationId}/approve
+      - method: POST
+        path: /api/v1/instructor-applications/{applicationId}/reject
+      - method: POST
+        path: /api/v1/instructor-partnerships/{userId}/terminate
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+      mfaRequired: true
+    authorization:
+      permissionsAll: [user.instructor.review.any]
+      relationship: null
+      attributes:
+        - valid workflow-state transition
+        - approval requests an INSTRUCTOR grant through auth
+      entitlement: null
+      quota: null
+    audit: security-critical
+
+  - id: user.profile-read-internal
+    owner: user
+    transport: http
+    exposure: internal
+    routes:
+      - method: GET
+        path: /internal/users/{userId}
+      - method: GET
+        path: /internal/user-ids
+      - method: GET
+        path: /internal/users/{userId}/instructor-verified
+      - method: GET
+        path: /internal/users/instructor-lookup
+    authentication:
+      required: true
+      tokenKind: service
+      audiences: [cinx-user-internal]
+      allowedClients:
+        - cinx-learning-service
+        - cinx-notification-service
+    authorization:
+      permissionsAll: [user.internal.profile.read]
+      relationship: null
+      attributes:
+        - response fields follow the caller-specific internal contract
+        - instructor-lookup answers one verified, non-terminated instructor for an exact email, else 404 (no directory)
+      entitlement: null
+      quota: null
+    audit: service
+
+  - id: user.policy-public-read
+    owner: user
+    transport: http
+    exposure: public
+    routes:
+      - method: GET
+        path: /api/v1/policies/{slug}
+    authentication:
+      required: false
+    authorization:
+      permissionsAll: []
+      relationship: null
+      attributes:
+        - policy version is published
+      entitlement: null
+      quota: null
+    audit: none
+
+  - id: user.policy-manage-any
+    owner: user
+    transport: http
+    exposure: user
+    routes:
+      - method: POST
+        path: /api/v1/policies
+      - method: PUT
+        path: /api/v1/policies/{policyId}
+      - method: POST
+        path: /api/v1/policies/{policyId}/archive
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAll: [user.policy.manage.any]
+      relationship: null
+      attributes:
+        - valid workflow-state transition
+      entitlement: null
+      quota: null
+    audit: business
+
+  - id: user.policy-publish-any
+    owner: user
+    transport: http
+    exposure: user
+    routes:
+      - method: POST
+        path: /api/v1/policies/{policyId}/publish
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+      mfaRequired: true
+    authorization:
+      permissionsAll: [user.policy.publish.any]
+      relationship: null
+      attributes:
+        - valid workflow-state transition
+      entitlement: null
+      quota: null
+    audit: business-critical
+
+  - id: commerce.cart-self
+    owner: commerce
+    transport: http
+    exposure: user
+    routes:
+      - method: GET|POST|DELETE
+        path: /api/v1/cart/**
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAll: [commerce.cart.manage.self]
+      relationship: self
+      attributes:
+        - userId is derived from the token
+        - adding a course in one of the caller's paid orders is refused (COURSE_ALREADY_OWNED)
+        - items carry sellable and owned flags
+      entitlement: null
+      quota: null
+    audit: none
+
+  - id: commerce.wishlist-self
+    owner: commerce
+    transport: http
+    exposure: user
+    routes:
+      - method: GET|POST|DELETE
+        path: /api/v1/wishlist/**
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAll: [commerce.wishlist.manage.self]
+      relationship: self
+      attributes:
+        - userId is derived from the token
+      entitlement: null
+      quota: null
+    audit: none
+
+  - id: commerce.order-create-self
+    owner: commerce
+    transport: http
+    exposure: user
+    routes:
+      - method: POST
+        path: /api/v1/orders
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAll: [commerce.order.create.self]
+      relationship: self
+      attributes:
+        - sellability and price are loaded from trusted local projections
+        - totals are calculated server-side
+        - a course in one of the caller's paid orders is refused (COURSE_ALREADY_OWNED)
+        - a zero total is paid at creation and writes CommerceOrderPaid in the same transaction
+      entitlement: null
+      quota: null
+    idempotency:
+      required: true
+      header: Idempotency-Key
+      fingerprintRequired: true
+    audit: financial
+
+  - id: commerce.order-cancel-self
+    owner: commerce
+    transport: http
+    exposure: user
+    routes:
+      - method: POST
+        path: /api/v1/orders/{orderId}/cancel
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAll: [commerce.order.create.self]
+      relationship: order-owner
+      attributes:
+        - only a PENDING order, under a row lock shared with the payment callback
+        - the voucher redemption stays consumed
+      entitlement: null
+      quota: null
+    concealUnauthorizedResource: true
+    audit: financial
+
+  - id: commerce.order-payment-link-create-self
+    owner: commerce
+    transport: http
+    exposure: user
+    routes:
+      - method: POST
+        path: /api/v1/orders/{orderId}/payments
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAll: [commerce.order.create.self]
+      relationship: order-owner
+      attributes:
+        - only a PENDING order, under the same row lock as the payment webhooks
+        - the amount sent to the gateway is the stored order total, never a client value
+        - a gateway without configured keys, or that cannot take the amount, is refused
+        - a live link for the same order and gateway is reused instead of issuing another
+      entitlement: null
+      quota: null
+    concealUnauthorizedResource: true
+    audit: financial
+
+  - id: commerce.order-read
+    owner: commerce
+    transport: http
+    exposure: user
+    routes:
+      - method: GET
+        path: /api/v1/orders/{orderId}
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAny:
+        - commerce.order.read.self
+        - commerce.order.read.any
+      relationship: order-owner-or-any
+      attributes: []
+      entitlement: null
+      quota: null
+    concealUnauthorizedResource: true
+    audit: conditional
+
+  - id: commerce.voucher-manage-any
+    owner: commerce
+    transport: http
+    exposure: user
+    routes:
+      - method: GET|POST
+        path: /api/v1/vouchers
+      - method: GET|PUT
+        path: /api/v1/vouchers/{code}
+      - method: PATCH
+        path: /api/v1/vouchers/{code}/active
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAll: [commerce.voucher.manage.any]
+      relationship: null
+      attributes: []
+      entitlement: null
+      quota: null
+    audit: financial
+
+  - id: commerce.voucher-preview-self
+    owner: commerce
+    transport: http
+    exposure: user
+    routes:
+      - method: GET
+        path: /api/v1/vouchers/{code}/preview
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAll: []
+      relationship: self
+      attributes:
+        - eligibility is calculated for the authenticated user and current cart
+        - inactive or non-applicable vouchers do not expose another user context
+      entitlement: null
+      quota: null
+    audit: none
+
+  - id: commerce.plan-public-read
+    owner: commerce
+    transport: http
+    exposure: public
+    routes:
+      - method: GET
+        path: /api/v1/plans
+      - method: GET
+        path: /api/v1/plans/{planCode}
+    authentication:
+      required: false
+    authorization:
+      permissionsAll: []
+      relationship: null
+      attributes:
+        - only active published plan versions and saleable offers are returned
+        - customer-segment filters are display filters and never prove checkout eligibility
+        - the response adds the translated name and description, the offers' price, the saleable features and a purchasable flag; features that are not saleable are never listed
+      entitlement: null
+      quota: null
+    audit: none
+
+  - id: commerce.plan-manage-any
+    owner: commerce
+    transport: http
+    exposure: user
+    routes:
+      - method: GET|POST|PUT|PATCH
+        path: /api/v1/admin/plans/**
+      - method: GET|POST|PUT|PATCH
+        path: /api/v1/admin/plan-product-lines/**
+      - method: GET|PUT
+        path: /api/v1/admin/plan-system-bindings/**
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+      mfaRequired: true
+    authorization:
+      permissionsAll: [commerce.plan.manage.any]
+      relationship: null
+      attributes:
+        - published plan versions are immutable
+        - feature keys exist in the feature registry
+        - eligibility and billing-policy keys exist in reviewed registries
+        - product-line eligibility and subscription slot are immutable once published
+        - plan entitlements cannot encode auth.*, ROLE_*, PERM_* or SCOPE_* values
+        - VND amounts have no fractional unit and provider references are server-created
+        - a version is not saleable until provider Product and Price references reconcile
+        - system bindings are audited data and never cause a role or permission mutation
+      entitlement: null
+      quota: null
+    audit: financial
+
+  - id: commerce.subscription-read-self
+    owner: commerce
+    transport: http
+    exposure: user
+    routes:
+      - method: GET
+        path: /api/v1/subscriptions/me
+      - method: GET
+        path: /api/v1/entitlements/me
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAll: [commerce.subscription.read.self]
+      relationship: self
+      attributes: []
+      entitlement: null
+      quota: null
+    audit: none
+
+  - id: commerce.subscription-change-self
+    owner: commerce
+    transport: http
+    exposure: user
+    routes:
+      - method: POST
+        path: /api/v1/subscriptions/checkout-sessions
+      - method: POST
+        path: /api/v1/subscriptions/me/change
+      - method: POST
+        path: /api/v1/subscriptions/me/cancel
+      - method: POST
+        path: /api/v1/subscriptions/me/resume
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAll: [commerce.subscription.change.self]
+      relationship: self
+      attributes:
+        - authenticated account is ACTIVE
+        - requested offer is active and server resolves amount, currency and provider price
+        - plan eligibility policy is satisfied by current auth state
+        - VERIFIED_INSTRUCTOR requires the pre-existing INSTRUCTOR role
+        - eligibility is rechecked before provider-confirmed activation
+        - a subscription command cannot request, grant or revoke an authorization role
+        - v1 accepts only USER subjects and one current BASE subscription slot
+        - transition follows subscription state machine
+      entitlement: null
+      quota: null
+    idempotency:
+      required: true
+      header: Idempotency-Key
+      fingerprintRequired: true
+    audit: financial
+
+  - id: commerce.subscription-adjust-any
+    owner: commerce
+    transport: http
+    exposure: user
+    routes:
+      - method: POST
+        path: /api/v1/admin/subscriptions/{subscriptionId}/adjust
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+      mfaRequired: true
+    authorization:
+      permissionsAll: [commerce.subscription.adjust.any]
+      relationship: null
+      attributes:
+        - adjustment reason and expiry are required
+        - provider state is reconciled where applicable
+        - adjustment cannot bypass plan eligibility or mutate authorization roles
+      entitlement: null
+      quota: null
+    audit: financial-critical
+
+  - id: commerce.billing-provider-webhook
+    owner: commerce
+    transport: http
+    exposure: provider
+    routes:
+      - method: POST
+        path: /api/v1/billing/webhooks/{provider}
+    authentication:
+      required: true
+      mechanism: provider-signature
+      rawBodyRequired: true
+      timestampAndReplayWindowRequired: true
+      providerAllowlistRequired: true
+    authorization:
+      permissionsAll: []
+      relationship: null
+      attributes:
+        - v1 billing provider allowlist contains exactly STRIPE
+        - provider event ID is durably deduplicated
+        - stale provider object versions cannot regress state
+        - plan eligibility is rechecked before paid entitlement activation
+        - browser redirect is never proof of payment
+      entitlement: null
+      quota: null
+    audit: financial-critical
+
+  - id: commerce.order-payment-provider-webhook
+    owner: commerce
+    transport: http
+    exposure: provider
+    routes:
+      - method: POST
+        path: /api/v1/payments/webhooks/stripe
+      - method: POST
+        path: /api/v1/payments/webhooks/momo
+      - method: GET
+        path: /api/v1/payments/webhooks/vnpay
+    authentication:
+      required: true
+      mechanism: provider-signature
+      rawBodyRequired: true
+      timestampAndReplayWindowRequired: true
+      providerAllowlistRequired: true
+    authorization:
+      permissionsAll: []
+      relationship: null
+      attributes:
+        - this is the one-time order-payment webhook boundary; the removed generic callback endpoint is gone
+        - only the three listed gateways exist, each with its own route and signature scheme (Stripe HMAC with a timestamp window, MoMo HMAC-SHA256, VNPay HMAC-SHA512)
+        - MoMo and VNPay carry no timestamp, so replay is stopped by the durable (provider, event ID) deduplication and by the attempt and order state
+        - the order is found through a payment attempt this service issued, never through a client-supplied order ID
+        - the attempt amount, the order total and the paid amount must all be equal
+        - Stripe sessions are fetched again by ID before they count as paid
+        - browser redirect is never proof of payment
+      entitlement: null
+      quota: null
+    audit: financial-critical
+
+  - id: commerce.entitlement-read-internal
+    owner: commerce
+    transport: http
+    exposure: internal
+    routes:
+      - method: GET
+        path: /internal/entitlements/users/{userId}
+    authentication:
+      required: true
+      tokenKind: service
+      audiences: [cinx-commerce-internal]
+      allowedClients:
+        - cinx-learning-service
+        - cinx-recommendation-service
+        - cinx-assistant-service
+    authorization:
+      permissionsAll: [commerce.internal.entitlement.read]
+      relationship: null
+      attributes:
+        - endpoint is reconciliation only, not the hot-path dependency
+      entitlement: null
+      quota: null
+    audit: service
+
+  - id: assistant.reminder-text-internal
+    owner: assistant
+    transport: http
+    exposure: internal
+    routes:
+      - method: POST
+        path: /internal/reminders/text
+    authentication:
+      required: true
+      tokenKind: service
+      audiences: [cinx-assistant-internal]
+      allowedClients:
+        - cinx-learning-service
+    authorization:
+      permissionsAll: [assistant.internal.reminder.write]
+      relationship: null
+      attributes:
+        - learning chooses the learner, hour and reason; the assistant only rewords the template it is sent
+        - switched off with capability learner.study_reminder (503); a rewrite adding a link or an unknown number is 422
+        - no learner credits are spent
+      entitlement: null
+      quota: null
+    audit: service
+
+  - id: learning.course-public-read
+    owner: learning
+    transport: http
+    exposure: public
+    routes:
+      - method: GET
+        path: /api/v1/courses
+      - method: GET
+        path: /api/v1/courses/{courseId}
+      - method: GET
+        path: /api/v1/courses/{courseId}/curriculum
+      - method: GET
+        path: /api/v1/community/reviews
+      - method: GET
+        path: /api/v1/community/reviews/statistics/courses/{courseId}
+    authentication:
+      required: false
+    authorization:
+      permissionsAll: []
+      relationship: null
+      attributes:
+        - only published public metadata is returned
+        - a published course's intro and outline are open to everyone, paid or not; an unpublished course keeps the read rules (owner, member, admin)
+        - no email leaves these routes, except the instructor's email for admins; the review list carries no reviewer, replier or reactor email
+        - draft fields and protected lesson content are excluded
+      entitlement: null
+      quota: null
+    audit: none
+
+  - id: learning.instructor-public-read
+    owner: learning
+    transport: http
+    exposure: public
+    routes:
+      - method: GET
+        path: /api/v1/instructors/{instructorId}
+    authentication:
+      required: false
+    authorization:
+      permissionsAll: []
+      relationship: null
+      attributes:
+        - only a verified instructor whose partnership is not terminated is returned; an unknown id, a non-instructor, an unverified and a terminated one all answer 404, so existence is not confirmed
+        - name, avatar, bio, join date, published-course figures and category counts only; no email, phone, CV or application fields
+        - the response is cacheable for 60 seconds
+      entitlement: null
+      quota: null
+    audit: none
+
+  - id: learning.featured-public-read
+    owner: learning
+    transport: http
+    exposure: public
+    routes:
+      - method: GET
+        path: /api/v1/learning/featured-paths
+      - method: GET
+        path: /api/v1/learning/featured-paths/{id}
+      - method: GET
+        path: /api/v1/courses/featured
+      - method: GET
+        path: /api/v1/community/reviews/featured
+      - method: GET
+        path: /api/v1/courses/stats/public
+      - method: GET
+        path: /api/v1/assessments/daily-quiz
+    authentication:
+      required: false
+    authorization:
+      permissionsAll: []
+      relationship: null
+      attributes:
+        - only active items that point at published courses are returned
+        - the daily quiz answer key is public by design; it is never a graded assessment
+      entitlement: null
+      quota: null
+    audit: none
+
+  - id: learning.featured-manage
+    owner: learning
+    transport: http
+    exposure: user
+    routes:
+      - method: GET
+        path: /api/v1/learning/admin/featured/{kind}
+      - method: POST
+        path: /api/v1/learning/admin/featured/{kind}
+      - method: PUT
+        path: /api/v1/learning/admin/featured/{kind}/{id}
+      - method: PATCH
+        path: /api/v1/learning/admin/featured/{kind}/{id}
+      - method: DELETE
+        path: /api/v1/learning/admin/featured/{kind}/{id}
+      - method: PUT
+        path: /api/v1/learning/admin/featured/{kind}/order
+      - method: GET
+        path: /api/v1/learning/admin/daily-quiz
+      - method: GET
+        path: /api/v1/learning/admin/daily-quiz/today
+      - method: POST
+        path: /api/v1/learning/admin/daily-quiz
+      - method: PUT
+        path: /api/v1/learning/admin/daily-quiz/{id}
+      - method: DELETE
+        path: /api/v1/learning/admin/daily-quiz/{id}
+      - method: PUT
+        path: /api/v1/learning/admin/daily-quiz/order
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+      mfaRequired: true
+    authorization:
+      permissionsAll: [learning.featured.manage.any]
+      relationship: null
+      attributes:
+        - "{kind} is one of paths, courses, reviews"
+        - reads need the permission only; writes also need a satisfied MFA step-up
+        - featured paths and courses accept published courses only
+      entitlement: null
+      quota: null
+    audit: business-critical
+
+  - id: learning.owl-wardrobe-self
+    owner: learning
+    transport: http
+    exposure: user
+    routes:
+      - method: GET
+        path: /api/v1/learning/owl/wardrobe
+      - method: PUT
+        path: /api/v1/learning/owl/wardrobe
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAll: []
+      relationship: self
+      attributes:
+        - the wardrobe is the JWT subject's own; no path or body identity
+        - an item can be worn only when active, of its slot and unlocked (free, highest streak reached, or a season earned)
+      entitlement: null
+      quota: null
+    audit: none
+
+  - id: learning.owl-skins-manage
+    owner: learning
+    transport: http
+    exposure: user
+    routes:
+      - method: GET
+        path: /api/v1/learning/admin/owl-skins
+      - method: PATCH
+        path: /api/v1/learning/admin/owl-skins/{code}
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+      mfaRequired: true
+    authorization:
+      permissionsAll: [learning.featured.manage.any]
+      relationship: null
+      attributes:
+        - reads need the permission only; writes also need a satisfied MFA step-up
+        - only the active flag and a SEASON item's dates change; the catalog itself ships with releases
+      entitlement: null
+      quota: null
+    audit: business-critical
+
+  - id: learning.course-create
+    owner: learning
+    transport: http
+    exposure: user
+    routes:
+      - method: POST
+        path: /api/v1/courses
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAll: [learning.course.create]
+      relationship: null
+      attributes:
+        - active verified instructor partnership
+      entitlement: null
+      quota: null
+    audit: business
+
+  - id: learning.course-update
+    owner: learning
+    transport: http
+    exposure: user
+    routes:
+      - method: PUT
+        path: /api/v1/courses/{courseId}
+      - method: POST
+        path: /api/v1/courses/{courseId}/submit
+      - method: POST
+        path: /api/v1/courses/{courseId}/archive
+      - method: POST
+        path: /api/v1/courses/{courseId}/unarchive
+      - method: POST
+        path: /api/v1/courses/{courseId}/withdraw
+      - method: DELETE
+        path: /api/v1/courses/{courseId}
+      - method: GET
+        path: /api/v1/courses/{courseId}/readiness
+      - method: GET
+        path: /api/v1/courses/{courseId}/draft/changes
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAny:
+        - learning.course.update.own
+        - learning.course.update.any
+      relationship: course-instructor-unless-any
+      attributes:
+        - active OWNER, MANAGER or EDITOR membership may edit course content
+        - submitting runs the same readiness check as GET readiness (400 COURSE_NOT_READY with the problems)
+        - only OWNER or MANAGER may submit for approval or withdraw a course waiting for approval
+        - only OWNER may archive or unarchive
+        - only OWNER may delete, and only a DRAFT course never published, not in review and with no entitlement (409 COURSE_NOT_DELETABLE otherwise)
+        - operation is allowed in the current course workflow state
+      entitlement: null
+      quota: null
+    concealUnauthorizedResource: true
+    audit: business
+
+  - id: learning.course-collaboration
+    owner: learning
+    transport: http
+    exposure: user
+    routes:
+      - method: GET|POST|PATCH|DELETE
+        path: /api/v1/courses/{courseId}/collaborators/**
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAny:
+        - learning.course.update.own
+        - learning.course.update.any
+      relationship: active-course-membership
+      attributes:
+        - OWNER manages invitations, roles, revocation and ownership transfer
+        - OWNER looks an invitee up by exact email (GET .../lookup); only a single verified instructor answers, no directory
+        - invited instructor can accept or decline only their own invitation
+        - target instructor must have an active verified instructor partnership
+        - membership status is checked in learning service, not trusted from path or body
+      entitlement: null
+      quota: null
+    concealUnauthorizedResource: true
+    audit: business
+
+  - id: learning.course-invitations-self
+    owner: learning
+    transport: http
+    exposure: user
+    routes:
+      - method: GET
+        path: /api/v1/courses/collaborators/invitations
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAll: [learning.course.update.own]
+      relationship: self
+      attributes:
+        - returns only the caller's PENDING memberships
+      entitlement: null
+      quota: null
+    concealUnauthorizedResource: false
+    audit: none
+
+  - id: learning.instructor-courses
+    owner: learning
+    transport: http
+    exposure: user
+    routes:
+      - method: GET
+        path: /api/v1/learning/instructor/courses
+      - method: GET
+        path: /api/v1/learning/instructor/courses/{courseId}
+      - method: GET
+        path: /api/v1/learning/instructor/courses/{courseId}/learners
+      - method: GET
+        path: /api/v1/learning/instructor/courses/{courseId}/lesson-reach
+      - method: GET
+        path: /api/v1/learning/instructor/courses/{courseId}/quizzes
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAny:
+        - learning.course.update.own
+        - learning.submission.grade.own
+      relationship: active-course-membership
+      attributes:
+        - the list and one row need learning.course.update.own and any active membership (OWNER, MANAGER, EDITOR); a non-member gets 404
+        - an EDITOR row carries no learner, waiting or overdue numbers
+        - learners, lesson-reach and quizzes need learning.submission.grade.own and OWNER or MANAGER
+        - learner rows carry no email
+      entitlement: null
+      quota: null
+    concealUnauthorizedResource: true
+    audit: none
+
+  - id: learning.curriculum-update
+    owner: learning
+    transport: http
+    exposure: user
+    routes:
+      - method: PATCH
+        path: /api/v1/courses/{courseId}/curriculum/**
+      - method: POST|PUT|DELETE
+        path: /api/v1/courses/{courseId}/sections/**
+      - method: POST|PUT|DELETE
+        path: /api/v1/courses/{courseId}/lessons/**
+      - method: POST|PUT|DELETE
+        path: /api/v1/courses/{courseId}/images/**
+      - method: PUT|DELETE
+        path: /api/v1/courses/{courseId}/promo-video
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAny:
+        - learning.curriculum.update.own
+        - learning.course.update.any
+      relationship: course-instructor-unless-any
+      attributes:
+        - course is in an editable workflow state
+        - every nested section, lesson, image, quiz and subtitle ID belongs to courseId
+        - images, the intro video and lesson content apply to a published course at once, not through the draft
+        - an essay question's referenceAnswer is returned to course members only, never to a learner reading the quiz
+        - a learner reading a quiz or its questions gets no isCorrect (null), no short-text options, no matching matchText and no ordering optionOrder; course members get them
+        - POST .../videos/subtitles/{subtitleId}/approve publishes an AI subtitle track only from REVIEW_REQUIRED and records the reviewer; saving a track's content never approves it
+      entitlement: null
+      quota: null
+    concealUnauthorizedResource: true
+    audit: business
+
+  - id: learning.course-media-upload
+    owner: learning
+    transport: http
+    exposure: user
+    routes:
+      - method: GET
+        path: /api/v1/courses/upload/presigned-url
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAny:
+        - learning.curriculum.update.own
+        - learning.course.update.any
+      relationship: null
+      attributes:
+        - signs a short-lived PUT URL for course images, videos, PDFs and assignment attachments; the object key is generated under courses/
+        - contentType must be on the service allowlist (images, common video, PDF, Office documents, zip, plain text and csv); SVG and HTML are refused with 400
+        - the URL is not tied to one course; the later link call re-checks course membership
+      entitlement: null
+      quota: null
+    audit: none
+
+  - id: learning.course-review-reject
+    owner: learning
+    transport: http
+    exposure: user
+    routes:
+      - method: POST
+        path: /api/v1/admin/courses/{courseId}/reject
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+      mfaRequired: true
+    authorization:
+      permissionsAll: [learning.course.review.any]
+      relationship: null
+      attributes:
+        - reviewer cannot bypass required workflow state
+        - the body carries a reason, draft review notes of this course (noteIds), or both
+      entitlement: null
+      quota: null
+    audit: business-critical
+
+  - id: learning.course-review-approve-publish
+    owner: learning
+    transport: http
+    exposure: user
+    routes:
+      - method: POST
+        path: /api/v1/admin/courses/{courseId}/approve
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+      mfaRequired: true
+    authorization:
+      permissionsAll:
+        - learning.course.review.any
+        - learning.course.publish.any
+      relationship: null
+      attributes:
+        - reviewer cannot bypass required workflow state
+      entitlement: null
+      quota: null
+    audit: business-critical
+
+  - id: learning.course-subscription-policy-manage
+    owner: learning
+    transport: http
+    exposure: user
+    routes:
+      - method: PUT
+        path: /api/v1/admin/courses/{courseId}/access-policy
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+      mfaRequired: true
+    authorization:
+      permissionsAll: [learning.course.subscription-policy.manage.any]
+      relationship: null
+      attributes:
+        - access model and feature key are valid
+        - instructor cannot self-enroll a course into paid catalog
+      entitlement: null
+      quota: null
+    audit: financial
+
+  - id: learning.lesson-content-read
+    owner: learning
+    transport: http
+    exposure: user
+    routes:
+      - method: GET
+        path: /api/v1/courses/{courseId}/lessons/{lessonId}/**
+    authentication:
+      required: conditional
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAll: []
+      relationship: course-instructor-or-learner
+      attributes:
+        - preview content may be anonymous
+        - a preview lesson of a published course is open to everyone, including signed-in non-buyers; the learning chain permits GET .../videos and .../articles anonymously for this
+        - normal content requires published and available course state
+        - a learner is refused (403 LESSON_LOCKED, missingPrerequisiteIds) until every published prerequisite is done; done = completed progress, a submitted quiz session (SUBMITTED, GRADED, PENDING_GRADE) or an assignment submission; previews, admins and course members are not locked
+        - an AI subtitle track waiting for review (REVIEW_REQUIRED) is listed, and its .../content and .../word-confidence answered, only for someone who can manage the course; anyone else gets it left out or 404
+      entitlement:
+        type: course-access
+        acceptedSources:
+          - permanent-purchase-grant
+          - active-subscription-feature-grant
+          - explicit-admin-grant
+          - preview
+          - course-owner
+      quota: null
+    concealUnauthorizedResource: false
+    audit: conditional
+
+  - id: learning.enroll-self
+    owner: learning
+    transport: http
+    exposure: user
+    routes:
+      - method: POST
+        path: /api/v1/enrollments
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAll: []
+      relationship: self
+      attributes:
+        - course is published and enrollable
+      entitlement:
+        type: course-access
+        acceptedSources:
+          - permanent-purchase-grant
+          - active-subscription-feature-grant
+          - explicit-admin-grant
+          - free-course
+      quota: null
+    idempotency:
+      required: true
+      key: user-and-course
+    audit: business
+
+  - id: learning.lesson-notes-self
+    owner: learning
+    transport: http
+    exposure: user
+    routes:
+      - method: POST
+        path: /api/v1/learning/courses/{courseId}/lessons/{lessonId}/notes
+      - method: GET
+        path: /api/v1/learning/courses/{courseId}/lessons/{lessonId}/notes
+      - method: GET
+        path: /api/v1/learning/courses/{courseId}/notes
+      - method: PUT
+        path: /api/v1/learning/notes/{noteId}
+      - method: DELETE
+        path: /api/v1/learning/notes/{noteId}
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAll: []
+      relationship: self
+      attributes:
+        - notes are the caller's own; update and delete check ownership (NOT_RESOURCE_OWNER)
+        - lesson routes run the lesson-content check, prerequisite lock included; the course list requires read access to the course
+        - replaces the removed /video-notes routes
+      entitlement: null
+      quota: null
+    audit: none
+
+  - id: learning.progress-read-self
+    owner: learning
+    transport: http
+    exposure: user
+    routes:
+      - method: GET
+        path: /api/v1/learning/course-progress
+      - method: GET
+        path: /api/v1/learning/course-progress/{courseId}
+      - method: GET
+        path: /api/v1/learning/course-progress/{courseId}/items
+      - method: GET
+        path: /api/v1/learning/course-progress/{courseId}/locks
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAll: [learning.progress.read.self]
+      relationship: self
+      attributes:
+        - path userId is never trusted
+        - existing progress remains stored after subscription expiry
+        - locks require read access to the course and use the same rule as the lesson-content check
+      entitlement: null
+      quota: null
+    audit: none
+
+  - id: learning.progress-write-self
+    owner: learning
+    transport: http
+    exposure: user
+    routes:
+      - method: POST
+        path: /api/v1/learning/course-progress/items/{itemId}/complete
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAll: [learning.progress.write.self]
+      relationship: self
+      attributes:
+        - item belongs to a course available to the authenticated user
+        - existing progress remains stored after subscription expiry
+      entitlement:
+        type: course-access
+        requiredFor: protected-content-write
+      quota: null
+    audit: none
+
+  - id: learning.assignment-upload-self
+    owner: learning
+    transport: http
+    exposure: user
+    routes:
+      - method: GET
+        path: /api/v1/learning/upload/presigned-url
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAll: [learning.progress.write.self]
+      relationship: self
+      attributes:
+        - signs a short-lived PUT URL for an assignment submission file; the object key is generated under learning/
+        - only application/pdf, image/png, image/jpeg, image/webp and image/gif are signed; any other contentType answers 400
+        - the URL is not tied to one assignment; submitting the assignment still checks enrollment
+      entitlement: null
+      quota: null
+    audit: none
+
+  - id: learning.study-plan-read-self
+    owner: learning
+    transport: http
+    exposure: user
+    routes:
+      - method: GET
+        path: /api/v1/learning/study-plan
+      - method: POST
+        path: /api/v1/learning/study-plan/preview
+      - method: GET
+        path: /api/v1/learning/activity/last
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAll: [learning.progress.read.self]
+      relationship: self
+      attributes:
+        - the plan is looked up by the JWT subject only; no id is accepted
+        - preview computes an estimate and stores nothing
+      entitlement: null
+      quota: null
+    audit: none
+
+  - id: learning.my-courses-self
+    owner: learning
+    transport: http
+    exposure: user
+    routes:
+      - method: GET
+        path: /api/v1/learning/my-courses
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAll: [learning.progress.read.self]
+      relationship: self
+      attributes:
+        - rows come from the JWT subject's course entitlements only; no id is accepted
+        - courses pass the same readability check as GET /api/v1/courses/ids
+        - the instructor is id and name only, never the email
+      entitlement: null
+      quota: null
+    audit: none
+
+  - id: learning.activity-summary-self
+    owner: learning
+    transport: http
+    exposure: user
+    routes:
+      - method: GET
+        path: /api/v1/learning/activity/summary
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAll: [learning.progress.read.self]
+      relationship: self
+      attributes:
+        - sums the JWT subject's own activity rows only; the admin series stays under /admin
+      entitlement: null
+      quota: null
+    audit: none
+
+  - id: learning.study-plan-write-self
+    owner: learning
+    transport: http
+    exposure: user
+    routes:
+      - method: PUT
+        path: /api/v1/learning/study-plan
+      - method: POST
+        path: /api/v1/learning/study-plan/days-off
+      - method: DELETE
+        path: /api/v1/learning/study-plan/days-off/{date}
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAll: [learning.progress.write.self]
+      relationship: self
+      attributes:
+        - source COURSES accepts only courses the user holds an entitlement for (1 to 12)
+        - source PATH uses the user's own active learning path
+        - a busy day must be between today and 60 days ahead (Asia/Ho_Chi_Minh)
+      entitlement: null
+      quota: null
+    audit: none
+
+  - id: learning.review-self
+    owner: learning
+    transport: http
+    exposure: user
+    routes:
+      - method: GET
+        path: /api/v1/learning/reviews/today
+      - method: POST
+        path: /api/v1/learning/reviews/{reviewItemId}/attempts
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAny: [learning.progress.read.self, learning.progress.write.self]
+      relationship: self
+      attributes:
+        - GET needs learning.progress.read.self, POST learning.progress.write.self; the review items are always the JWT subject's own (another learner's item answers 404)
+        - questions come only from quizzes that show the learner their attempts and answers; each read and answer goes through the learner's current lesson access, and a course they can no longer read is skipped, not shown
+        - today's queue carries no answer key; the key and explanation come back only with an answer
+        - a review answer never changes an official score, progress item or certificate; it records at most 300 s of activity and extends the streak
+        - POST requires Idempotency-Key; the same key and body replay the stored result, the same key with another body is 409 IDEMPOTENCY_KEY_REUSED
+      entitlement: null
+      quota: null
+    idempotency:
+      required: true
+      key: authenticated-user-and-request-fingerprint
+    audit: none
+
+  - id: learning.study-reminder-self
+    owner: learning
+    transport: http
+    exposure: user
+    routes:
+      - method: GET
+        path: /api/v1/learning/study-reminder
+      - method: PUT
+        path: /api/v1/learning/study-reminder
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAny: [learning.progress.read.self, learning.progress.write.self]
+      relationship: self
+      attributes:
+        - GET needs learning.progress.read.self, PUT learning.progress.write.self; the preference is the JWT subject's only
+        - the hour is 8 to 20 in Asia/Ho_Chi_Minh; reminders are on at 19 until the learner switches them off
+      entitlement: null
+      quota: null
+    audit: none
+
+  - id: learning.path-self
+    owner: learning
+    transport: http
+    exposure: user
+    routes:
+      - method: GET
+        path: /api/v1/learning/paths
+      - method: GET
+        path: /api/v1/learning/paths/{id}
+      - method: GET
+        path: /api/v1/learning/paths/active
+      - method: POST
+        path: /api/v1/learning/paths
+      - method: PUT
+        path: /api/v1/learning/paths/{id}/items
+      - method: DELETE
+        path: /api/v1/learning/paths/active
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      # enforced today by authentication plus the service-layer owner check; no permission is checked at runtime
+      permissionsAll: []
+      relationship: self
+      attributes:
+        - a path is read or edited only by the JWT subject that owns it; another user's id is 404
+        - at most one ACTIVE or PENDING_PAYMENT path per user, held by a unique key (409 LEARNING_PATH_ALREADY_ACTIVE)
+        - editing items applies only to an ACTIVE or PENDING_PAYMENT path; a course the user lacks goes to the cart
+      entitlement: null
+      quota: null
+    concealUnauthorizedResource: true
+    audit: none
+
+  - id: learning.student-progress-read-own-course
+    owner: learning
+    transport: http
+    exposure: user
+    routes:
+      - method: GET
+        path: /api/v1/learning/course-progress/courses/{courseId}/students/{studentId}/progress
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAny:
+        - learning.progress.read.own-course
+        - learning.analytics.read.any
+      relationship: active-course-membership
+      attributes: []
+      entitlement: null
+      quota: null
+    concealUnauthorizedResource: true
+    audit: conditional
+
+  - id: learning.engagement-read
+    owner: learning
+    transport: http
+    exposure: user
+    routes:
+      - method: GET
+        path: /api/v1/learning/courses/{courseId}/engagement/overview
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAny:
+        - learning.analytics.read.own
+        - learning.analytics.read.any
+      relationship: active-course-membership
+      attributes:
+        - active OWNER or MANAGER membership is required for instructor analytics
+      entitlement: null
+      quota: null
+    concealUnauthorizedResource: true
+    audit: conditional
+
+  - id: learning.submission-grade-own
+    owner: learning
+    transport: http
+    exposure: user
+    routes:
+      - method: POST
+        path: /api/v1/assessments/assignment-submissions/{submissionId}/score
+      - method: POST
+        path: /api/v1/assessments/quiz-sessions/{sessionId}/grade-essay
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAll: [learning.submission.grade.own]
+      relationship: submission-course-instructor
+      attributes:
+        - submission belongs to the requested course
+      entitlement: null
+      quota: null
+    concealUnauthorizedResource: true
+    audit: business
+
+  - id: learning.instructor-grading
+    owner: learning
+    transport: http
+    exposure: user
+    routes:
+      - method: GET
+        path: /api/v1/assessments/assignment-submissions/list
+      - method: GET
+        path: /api/v1/assessments/assignments/{lessonId}/grading
+      - method: PUT
+        path: /api/v1/assessments/assignments/{lessonId}/criteria
+      - method: PUT
+        path: /api/v1/assessments/assignment-submissions/{submissionId}/grade
+      - method: POST
+        path: /api/v1/assessments/assignment-submissions/{submissionId}/comments
+      - method: DELETE
+        path: /api/v1/assessments/assignment-submissions/{submissionId}/comments/{commentId}
+      - method: GET
+        path: /api/v1/assessments/assignment-submissions/{submissionId}/attachments/{attachmentId}/text
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAll: [learning.submission.grade.own]
+      relationship: submission-course-instructor
+      attributes:
+        - the lesson or submission belongs to a course where the caller is OWNER or MANAGER
+        - only the author deletes a line comment
+        - attachment text is limited to text types up to 512 KB
+      entitlement: null
+      quota: null
+    concealUnauthorizedResource: false
+    audit: business
+
+  - id: learning.instructor-workspace
+    owner: learning
+    transport: http
+    exposure: user
+    routes:
+      - method: GET
+        path: /api/v1/learning/instructor/inbox
+      - method: GET
+        path: /api/v1/learning/instructor/inbox/summary
+      - method: GET
+        path: /api/v1/learning/instructor/overview
+      - method: GET
+        path: /api/v1/learning/instructor/overview.csv
+      - method: GET
+        path: /api/v1/learning/instructor/activity
+      - method: GET
+        path: /api/v1/learning/instructor/comment-templates
+      - method: POST
+        path: /api/v1/learning/instructor/comment-templates
+      - method: DELETE
+        path: /api/v1/learning/instructor/comment-templates/{id}
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAll: [learning.submission.grade.own]
+      relationship: self
+      attributes:
+        - every read is limited to courses where the caller is OWNER or MANAGER
+        - comment templates and activity rows belong to the caller only
+      entitlement: null
+      quota: null
+    concealUnauthorizedResource: true
+    audit: none
+
+  - id: learning.instructor-qna
+    owner: learning
+    transport: http
+    exposure: user
+    routes:
+      - method: GET
+        path: /api/v1/community/qna/instructor/lessons/{lessonId}/questions
+      - method: GET
+        path: /api/v1/community/qna/instructor/lessons/{lessonId}/my-answers
+      - method: POST
+        path: /api/v1/community/qna/answers/batch
+      - method: GET
+        path: /api/v1/community/qna/statistics/courses/{courseId}
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAll: []
+      relationship: course-instructor-unless-any
+      attributes:
+        - lesson routes need OWNER or MANAGER on the lesson's course
+        - a batch is refused whole when any question is outside the caller's courses
+        - statistics need OWNER or MANAGER, or learning.analytics.read.any
+      entitlement: null
+      quota: null
+    concealUnauthorizedResource: false
+    audit: business
+
+  - id: learning.qna-participate
+    owner: learning
+    transport: http
+    exposure: user
+    routes:
+      - method: GET
+        path: /api/v1/community/qna/questions
+      - method: GET
+        path: /api/v1/community/qna/questions/similar
+      - method: GET
+        path: /api/v1/community/qna/questions/{questionId}
+      - method: GET
+        path: /api/v1/community/qna/questions/{questionId}/answers
+      - method: POST
+        path: /api/v1/community/qna/questions
+      - method: POST
+        path: /api/v1/community/qna/answers
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAll: []
+      relationship: course-instructor-or-learner
+      attributes:
+        - reading, asking, answering, voting, marking helpful and reporting require the right to study the course
+          (admin, active course member, enrolled, or subscription access), else 403 NOT_ENROLLED_IN_COURSE
+        - an answer carries the instructor badge only from the course's OWNER or MANAGER
+      entitlement: null
+      quota: null
+    concealUnauthorizedResource: false
+    audit: none
+
+  - id: learning.review-reply
+    owner: learning
+    transport: http
+    exposure: user
+    routes:
+      - method: POST
+        path: /api/v1/community/reviews/{reviewId}/replies
+      - method: PUT
+        path: /api/v1/community/reviews/replies/{replyId}
+      - method: DELETE
+        path: /api/v1/community/reviews/replies/{replyId}
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAll: []
+      relationship: course-instructor-unless-any
+      attributes:
+        - one reply per review; only its author edits it
+        - "GET /api/v1/community/reviews?unreplied=true filters only for the course's instructors"
+      entitlement: null
+      quota: null
+    concealUnauthorizedResource: false
+    audit: business
+
+  - id: learning.certificate-review-own
+    owner: learning
+    transport: http
+    exposure: user
+    routes:
+      - method: GET
+        path: /api/v1/certificates/requests
+      - method: GET
+        path: /api/v1/certificates/requests/{courseId}
+      - method: PUT
+        path: /api/v1/certificates/requests/{requestId}/approve
+      - method: PUT
+        path: /api/v1/certificates/requests/{requestId}/reject
+      - method: POST
+        path: /api/v1/certificates/requests/approve-batch
+      - method: GET
+        path: /api/v1/courses/{courseId}/certificate-conditions
+      - method: PUT
+        path: /api/v1/courses/{courseId}/certificate-conditions
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAll: [learning.submission.grade.own]
+      relationship: course-instructor-unless-any
+      attributes:
+        - moved from learning.analytics.read.own; INSTRUCTOR holds both
+        - a rejection needs a 5 to 500 character reason
+        - "GET /api/v1/certificates/requests lists only courses the caller owns or manages (OWNER or MANAGER), the same set that may approve and reject; an editor-only collaborator sees none of that course's requests"
+      entitlement: null
+      quota: null
+    concealUnauthorizedResource: false
+    audit: business
+
+  - id: learning.certificate-self
+    owner: learning
+    transport: http
+    exposure: user
+    routes:
+      - method: POST
+        path: /api/v1/certificates/apply/{courseId}
+      - method: GET
+        path: /api/v1/certificates/my-certificate/{courseId}
+      - method: GET
+        path: /api/v1/certificates/my-certificates
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAll: []
+      relationship: self
+      attributes:
+        - applying checks the course's certificate conditions; auto-approve issues at once
+      entitlement: null
+      quota: null
+    concealUnauthorizedResource: false
+    audit: business
+
+  - id: learning.course-review-feedback
+    owner: learning
+    transport: http
+    exposure: user
+    routes:
+      - method: GET
+        path: /api/v1/courses/{id}/reject-reason
+      - method: GET
+        path: /api/v1/courses/{id}/review-notes
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAll: []
+      relationship: course-team-member
+      attributes:
+        - any active role on the course (EDITOR or higher), or a learning admin
+      entitlement: null
+      quota: null
+    concealUnauthorizedResource: false
+    audit: none
+
+  - id: learning.course-review-notes-any
+    owner: learning
+    transport: http
+    exposure: user
+    routes:
+      - method: GET
+        path: /api/v1/admin/courses/{courseId}/review-notes
+      - method: POST
+        path: /api/v1/admin/courses/{courseId}/review-notes
+      - method: PUT
+        path: /api/v1/admin/courses/{courseId}/review-notes/{noteId}
+      - method: DELETE
+        path: /api/v1/admin/courses/{courseId}/review-notes/{noteId}
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+      mfaRequired: true
+    authorization:
+      permissionsAll: [learning.course.review.any]
+      relationship: null
+      attributes:
+        - only DRAFT notes are edited or deleted; they become SENT with the rejection
+      entitlement: null
+      quota: null
+    concealUnauthorizedResource: false
+    audit: security
+
+  - id: commerce.instructor-revenue-self
+    owner: commerce
+    transport: http
+    exposure: user
+    routes:
+      - method: GET
+        path: /api/v1/orders/instructor/revenue
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAll: [learning.course.update.own]
+      relationship: self
+      attributes:
+        - only order lines whose snapshotted instructor_id is the caller, from PAID orders
+      entitlement: null
+      quota: null
+    concealUnauthorizedResource: true
+    audit: none
+
+  - id: learning.community-moderate-any
+    owner: learning
+    transport: http
+    exposure: user
+    routes:
+      - method: GET|DELETE
+        path: /api/v1/community/reports/**
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+      mfaRequired: true
+    authorization:
+      permissionsAll: [learning.community.moderate.any]
+      relationship: null
+      attributes:
+        - moderation reason is required for destructive action
+      entitlement: null
+      quota: null
+    audit: moderation
+
+  - id: learning.course-read-internal
+    owner: learning
+    transport: http
+    exposure: internal
+    routes:
+      - method: GET
+        path: /internal/courses/**
+    authentication:
+      required: true
+      tokenKind: service
+      audiences: [cinx-learning-internal]
+      allowedClients:
+        - cinx-commerce-service
+        - cinx-notification-service
+        - cinx-recommendation-service
+    authorization:
+      permissionsAll: [learning.internal.course.read]
+      relationship: null
+      attributes:
+        - caller-specific response allowlist applies
+      entitlement: null
+      quota: null
+    audit: service
+
+  - id: learning.transcript-read-internal
+    owner: learning
+    transport: http
+    exposure: internal
+    routes:
+      - method: GET
+        path: /internal/courses/{courseId}/transcripts
+    authentication:
+      required: true
+      tokenKind: service
+      audiences: [cinx-learning-internal]
+      allowedClients:
+        - cinx-assistant-service
+    authorization:
+      permissionsAll: [learning.internal.transcript.read]
+      relationship: null
+      attributes:
+        - only a PUBLISHED course's published video lessons, READY tracks only
+        - a draft or archived course answers with no lessons, so the index drops it
+      entitlement: null
+      quota: null
+    audit: service
+
+  - id: learning.material-read-internal
+    owner: learning
+    transport: http
+    exposure: internal
+    routes:
+      - method: GET
+        path: /internal/courses/materials/content
+    authentication:
+      required: true
+      tokenKind: service
+      audiences: [cinx-learning-internal]
+      allowedClients:
+        - cinx-assistant-service
+    authorization:
+      permissionsAll: [learning.internal.material.read]
+      relationship: null
+      attributes:
+        - only keys the course presigned upload makes (courses/<uuid>-<name>); at most 25 MB
+        - the assistant registers a material only after learning confirms the instructor may edit that course
+      entitlement: null
+      quota: null
+    audit: service
+
+  - id: learning.report-read-internal
+    owner: learning
+    transport: http
+    exposure: internal
+    routes:
+      - method: GET
+        path: /internal/community/reports
+    authentication:
+      required: true
+      tokenKind: service
+      audiences: [cinx-learning-internal]
+      allowedClients:
+        - cinx-assistant-service
+    authorization:
+      permissionsAll: [learning.internal.report.read]
+      relationship: null
+      attributes:
+        - read-only; dismissing a report or deleting content stays on the MFA-gated admin endpoints
+        - the assistant calls it only for an admin with learning.community.moderate.any and a fresh MFA, and audits each call
+      entitlement: null
+      quota: null
+    audit: service
+
+  - id: reporting.overview-read-internal
+    owner: reporting
+    transport: http
+    exposure: internal
+    routes:
+      - method: GET
+        path: /internal/reporting/overview
+      - method: GET
+        path: /internal/reporting/finance/overview
+    authentication:
+      required: true
+      tokenKind: service
+      audiences: [cinx-reporting-internal]
+      allowedClients:
+        - cinx-assistant-service
+    authorization:
+      permissionsAll: [reporting.internal.overview.read]
+      relationship: null
+      attributes:
+        - the assistant checks reporting.dashboard.read (finance: reporting.finance.read) and a fresh MFA of the admin before calling, and audits each call
+      entitlement: null
+      quota: null
+    audit: service
+
+  - id: learning.course-review-read-any
+    owner: learning
+    transport: http
+    exposure: admin
+    routes:
+      - method: GET
+        path: /api/v1/admin/courses/{courseId}/draft
+      - method: GET
+        path: /api/v1/admin/courses/{courseId}/draft/curriculum
+      - method: GET
+        path: /api/v1/admin/courses/{courseId}/draft/changes
+      - method: GET
+        path: /api/v1/admin/courses/{courseId}/readiness
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAll: [learning.course.review.any]
+      relationship: null
+      attributes:
+        - read-only; a reviewer reads the submitted draft without joining the course team or holding update.any
+      entitlement: null
+      quota: null
+    audit: none
+
+  - id: learning.enrollment-read-internal
+    owner: learning
+    transport: http
+    exposure: internal
+    routes:
+      - method: GET
+        path: /internal/enrollments/**
+    authentication:
+      required: true
+      tokenKind: service
+      audiences: [cinx-learning-internal]
+      allowedClients:
+        - cinx-notification-service
+        - cinx-reporting-service
+    authorization:
+      permissionsAll: [learning.internal.enrollment.read]
+      relationship: null
+      attributes: []
+      entitlement: null
+      quota: null
+    audit: service
+
+  - id: recommendation.recommend-self
+    owner: recommendation
+    transport: http
+    exposure: user
+    routes:
+      - method: GET
+        path: /api/v1/recommendations/me
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAll: []
+      relationship: self
+      attributes:
+        - arbitrary userId is not accepted
+      entitlement: null
+      quota: null
+    audit: none
+
+  - id: recommendation.interaction-record-self
+    owner: recommendation
+    transport: http
+    exposure: user
+    routes:
+      - method: POST
+        path: /api/v1/recommendations/interactions
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAll: []
+      relationship: self
+      attributes:
+        - the user comes from the token; the body carries no userId
+        - the course must be a published course in the recommendation projection
+        - a recommendationId must be one of the caller's own recommendation slates and contain the course
+      entitlement: null
+      quota: null
+    idempotency:
+      required: true
+      header: Idempotency-Key
+      fingerprintRequired: true
+    audit: none
+
+  - id: recommendation.course-search
+    owner: recommendation
+    transport: http
+    exposure: public
+    routes:
+      - method: GET
+        path: /api/v1/recommendations/search
+    authentication:
+      required: false
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAll: []
+      relationship: null
+      attributes:
+        - searches only published courses from the local catalog projection
+        - without a token it is a guest search with no access or wishlist flags; a token that is present must be valid (401 otherwise)
+        - access and wishlist flags are computed for the caller from the token subject
+        - the assistant calls it with a token exchanged for cinx-api, never the user's own token
+        - the gateway limits it per minute, 30 for a guest (HMAC of the IP, no raw IP kept) and 120 for a user (uid); 429 beyond, and no limit while Redis is down
+      entitlement: null
+      quota: null
+    audit: none
+
+  - id: recommendation.user-read-any
+    owner: recommendation
+    transport: http
+    exposure: user
+    routes:
+      - method: GET
+        path: /api/v1/recommendations/users/{userId}
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAll: [recommendation.user.read.any]
+      relationship: null
+      attributes: []
+      entitlement: null
+      quota: null
+    audit: privacy
+
+  - id: notification.read-self
+    owner: notification
+    transport: http
+    exposure: user
+    routes:
+      - method: GET
+        path: /api/v1/notifications
+      - method: GET
+        path: /api/v1/notifications/unread-count
+      - method: GET
+        path: /api/v1/notifications/counts
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAll: [notification.read.self]
+      relationship: self
+      attributes:
+        - "GET /api/v1/notifications filters (query, isRead, type) and /counts apply only to the caller's own notifications; the subject is the JWT user"
+      entitlement: null
+      quota: null
+    audit: none
+
+  - id: notification.update-self
+    owner: notification
+    transport: http
+    exposure: user
+    routes:
+      - method: POST
+        path: /api/v1/notifications/{notificationId}/toggle-read
+      - method: POST
+        path: /api/v1/notifications/mark-all-read
+      - method: POST
+        path: /api/v1/notifications/mark-all-unread
+      - method: DELETE
+        path: /api/v1/notifications/{notificationId}
+      - method: POST
+        path: /api/v1/notifications/device-tokens
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAll: [notification.update.self]
+      relationship: self-and-notification-owner
+      attributes: []
+      entitlement: null
+      quota: null
+    concealUnauthorizedResource: true
+    audit: none
+
+  - id: notification.test-send-any
+    owner: notification
+    transport: http
+    exposure: user
+    routes:
+      - method: POST
+        path: /api/v1/notifications/test-push
+      - method: POST
+        path: /api/v1/notifications/test-in-app
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+      mfaRequired: true
+    authorization:
+      permissionsAll: [notification.test.send.any]
+      relationship: null
+      attributes:
+        - production test endpoints are disabled unless explicitly enabled
+      entitlement: null
+      quota: null
+    audit: security
+
+  - id: notification.broadcast-send-any
+    owner: notification
+    transport: http
+    exposure: user
+    routes:
+      - method: POST
+        path: /api/v1/notifications/broadcast
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+      mfaRequired: true
+    authorization:
+      permissionsAll: [notification.broadcast.send.any]
+      relationship: null
+      attributes: []
+      entitlement: null
+      quota: null
+    audit: security-critical
+
+  - id: notification.websocket-connect
+    owner: notification
+    transport: websocket-stomp
+    exposure: user
+    destinations:
+      connect: CONNECT
+      subscribeAllowlist:
+        - /user/queue/notifications
+      sendAllowlist: []
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+      credentialLocation: stomp-connect-header
+    authorization:
+      permissionsAll: [notification.read.self]
+      relationship: authenticated-user-destination
+      attributes:
+        - origin is in configured allowlist
+        - direct /queue/** and /topic/** subscriptions are denied
+      entitlement: null
+      quota: null
+    audit: security
+
+  - id: reporting.dashboard-read
+    owner: reporting
+    transport: http
+    exposure: user
+    routes:
+      - method: GET
+        path: /api/v1/reporting/overview
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+      mfaRequired: true
+    authorization:
+      permissionsAll: [reporting.dashboard.read]
+      relationship: null
+      attributes:
+        - response excludes revenue and other finance-only fields
+      entitlement: null
+      quota: null
+    audit: privacy
+
+  - id: reporting.finance-read
+    owner: reporting
+    transport: http
+    exposure: user
+    routes:
+      - method: GET
+        path: /api/v1/reporting/finance/overview
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+      mfaRequired: true
+    authorization:
+      permissionsAll: [reporting.finance.read]
+      relationship: null
+      attributes: []
+      entitlement: null
+      quota: null
+    audit: financial
+
+  - id: reporting.product-event-record-self
+    owner: reporting
+    transport: http
+    exposure: user
+    routes:
+      - method: POST
+        path: /api/v1/reporting/events
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAll: []
+      relationship: self
+      attributes:
+        - the user comes from the token; the body carries no userId, and a userId prop is dropped
+        - events and props are limited to contracts/analytics/product-events.yaml; strings are codes, never free text
+        - nothing is stored while the learner's "Thống kê sử dụng" switch is off
+        - at most 50 events a batch and 600 an hour per user (429 beyond)
+      entitlement: null
+      quota: null
+    idempotency:
+      required: false
+      key: eventId in the body; a repeated eventId is a counted no-op
+    audit: none
+
+  - id: reporting.experiment-assignment-self
+    owner: reporting
+    transport: http
+    exposure: user
+    routes:
+      - method: GET
+        path: /api/v1/reporting/experiments/me
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAll: []
+      relationship: self
+      attributes:
+        - only the caller's own variants of running experiments; a hash of the token's uid, no stored row
+      entitlement: null
+      quota: null
+    audit: none
+
+  - id: reporting.experiment-manage
+    owner: reporting
+    transport: http
+    exposure: user
+    routes:
+      - method: POST
+        path: /api/v1/reporting/experiments
+      - method: POST
+        path: /api/v1/reporting/experiments/{key}/start
+      - method: POST
+        path: /api/v1/reporting/experiments/{key}/stop
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+      mfaRequired: true
+    authorization:
+      permissionsAll: [reporting.experiment.manage.any]
+      relationship: null
+      attributes:
+        - a running experiment's variants never change; stopping it gives everyone control at once
+      entitlement: null
+      quota: null
+    audit: security
+
+  - id: reporting.experiment-read
+    owner: reporting
+    transport: http
+    exposure: user
+    routes:
+      - method: GET
+        path: /api/v1/reporting/experiments
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+      mfaRequired: true
+    authorization:
+      permissionsAny: [reporting.dashboard.read, reporting.experiment.manage.any]
+      relationship: null
+      attributes: []
+      entitlement: null
+      quota: null
+    audit: privacy
+
+  - id: reporting.funnel-read
+    owner: reporting
+    transport: http
+    exposure: user
+    routes:
+      - method: GET
+        path: /api/v1/reporting/funnels
+      - method: GET
+        path: /api/v1/reporting/events/catalog
+      - method: GET
+        path: /api/v1/reporting/experiments/{key}/results
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+      mfaRequired: true
+    authorization:
+      permissionsAll: [reporting.dashboard.read]
+      relationship: null
+      attributes:
+        - counts only; no user id or event row leaves the service
+      entitlement: null
+      quota: null
+    audit: privacy
+
+  - id: assistant.agent-chat
+    owner: assistant
+    transport: http-sse
+    exposure: user
+    routes:
+      - method: POST
+        path: /api/v1/assistant/chat
+      - method: GET
+        path: /api/v1/assistant/capabilities
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api, cinx-assistant]
+    authorization:
+      permissionsAny: [assistant.agent.use.learner, assistant.agent.use.instructor, assistant.agent.use.admin]
+      relationship: session-owner
+      attributes:
+        - the placement picks the persona; the matching assistant.agent.use.<persona> permission is required
+        - each capability adds its own permissions; a capability the caller lacks is not offered to the model
+        - the current AI policy version must be accepted (403 AI_POLICY_NOT_ACCEPTED)
+        - tools call domain services with a token exchanged for that service, never the caller's own token
+        - access needs AI credits left; recommendation.agent.advanced is not checked (Learner Free has it off but has credits)
+        - each capability also has a daily turn cap that guards against abuse
+        - an instructor placement spends assistant.instructor.credits instead of the learner credits
+        - an admin placement is not metered (no credits, no daily cap, plan GĐ3-a); every admin tool call is written to admin_tool_audit
+        - admin tools that read MFA-gated data (reports, reporting) require the caller's own fresh MFA, then read through /internal
+        - an optional tutor mode (EXPLAIN, GIVE_HINT, CHECK_UNDERSTANDING) is accepted only with placement lesson_player (else 400 MODE_NOT_ALLOWED) and pins learner.lesson_tutor
+      entitlement: null
+      quota:
+        type: reservation
+        quotaKey: recommendation.agent.requests
+        units: credits (1,000 tokens weighted per model), metered from real model usage
+        reserveBeforeSideEffect: true
+        commitOnSuccess: true
+        releaseOnSafeFailure: true
+      entitlementFailureCode: FEATURE_NOT_ENTITLED
+      quotaFailureCode: QUOTA_EXCEEDED
+    idempotency:
+      required: true
+      header: Idempotency-Key
+      fingerprintRequired: true
+    audit: metered
+
+  - id: assistant.session-self
+    owner: assistant
+    transport: http
+    exposure: user
+    routes:
+      - method: GET
+        path: /api/v1/assistant/sessions
+      - method: GET
+        path: /api/v1/assistant/sessions/{sessionId}/messages
+      - method: DELETE
+        path: /api/v1/assistant/sessions/{sessionId}
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api, cinx-assistant]
+    authorization:
+      permissionsAny: [assistant.agent.use.learner, assistant.agent.use.instructor, assistant.agent.use.admin]
+      relationship: session-owner
+      attributes: []
+      entitlement: null
+      quota: null
+    concealUnauthorizedResource: true
+    audit: none
+
+  - id: assistant.pending-action-decide
+    owner: assistant
+    transport: http
+    exposure: user
+    routes:
+      - method: GET
+        path: /api/v1/assistant/pending-actions
+      - method: GET
+        path: /api/v1/assistant/pending-actions/{actionId}
+      - method: POST
+        path: /api/v1/assistant/pending-actions/{actionId}/approve
+      - method: POST
+        path: /api/v1/assistant/pending-actions/{actionId}/reject
+      - method: PATCH
+        path: /api/v1/assistant/pending-actions/{actionId}
+      - method: GET
+        path: /api/v1/assistant/pending-actions/{actionId}/revisions
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api, cinx-assistant]
+    authorization:
+      permissionsAny: [assistant.action.approve.self]
+      relationship: action-actor-or-approver
+      attributes:
+        - a self action is visible to and decided only by the user it was proposed for, with assistant.action.approve.self
+        - a permission action is visible to and decided by holders of its approver permission
+        - an action marked requiresMfa needs a step-up token from the approver (403 MFA_STEP_UP_REQUIRED)
+        - the write runs with a token exchanged from the approver's token; the target service re-checks authorization
+        - the version shown must match (409 CONFLICT); expired or decided actions are 409
+        - PATCH edits a pending draft and is allowed only to the user it was proposed for; it bumps the version and the idempotency key
+        - revisions list the draft's payload at every version, to the same people who can see the action
+      entitlement: null
+      quota: null
+    concealUnauthorizedResource: true
+    audit: security
+
+  - id: assistant.pending-action-draft
+    owner: assistant
+    transport: http
+    exposure: user
+    routes:
+      - method: POST
+        path: /api/v1/assistant/pending-actions
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api, cinx-assistant]
+    authorization:
+      permissionsAny: [assistant.agent.use.learner]
+      relationship: self
+      attributes:
+        - the learner starts a learning_path.create or learning_path.replace_items draft by hand; no model runs and no credit is spent
+        - the draft is a self action of the caller; a sessionId must be the caller's own session (else 404), without one a new session is opened
+        - nothing reaches learning until the caller approves the draft
+      entitlement: null
+      quota: null
+    concealUnauthorizedResource: true
+    audit: security
+
+  - id: assistant.instructor-course-tools
+    owner: assistant
+    transport: http
+    exposure: user
+    routes:
+      - method: POST
+        path: /api/v1/assistant/instructor/courses/{courseId}/materials
+      - method: GET
+        path: /api/v1/assistant/instructor/courses/{courseId}/materials
+      - method: DELETE
+        path: /api/v1/assistant/instructor/courses/{courseId}/materials/{materialId}
+      - method: POST
+        path: /api/v1/assistant/instructor/courses/{courseId}/practice-jobs
+      - method: GET
+        path: /api/v1/assistant/instructor/courses/{courseId}/practice-jobs
+      - method: GET
+        path: /api/v1/assistant/instructor/practice-jobs/{jobId}
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api, cinx-assistant]
+    authorization:
+      permissionsAny: [assistant.agent.use.instructor]
+      relationship: course-instructor-unless-any
+      attributes:
+        - learning confirms the caller is an editor, manager or owner of the course (GET /api/v1/learning/instructor/courses/{id}) before anything is read or written
+        - a material is a file uploaded through learning's course presigned URL; its text is indexed for that course only
+        - a practice job proposes quiz.add_question actions in its own session; nothing reaches the quiz until each is approved
+        - practice jobs spend assistant.instructor.credits; when they run out the job stops and keeps what it made
+      entitlement: null
+      quota:
+        type: reservation
+        quotaKey: assistant.instructor.credits
+        units: server-calculated
+        reserveBeforeSideEffect: true
+        commitOnSuccess: true
+        releaseOnSafeFailure: true
+    concealUnauthorizedResource: true
+    audit: security
+
+  - id: assistant.memory-self
+    owner: assistant
+    transport: http
+    exposure: user
+    routes:
+      - method: GET
+        path: /api/v1/assistant/memory-consent
+      - method: PUT
+        path: /api/v1/assistant/memory-consent
+      - method: DELETE
+        path: /api/v1/assistant/memory-consent
+      - method: GET
+        path: /api/v1/assistant/memories
+      - method: PATCH
+        path: /api/v1/assistant/memories/{memoryId}
+      - method: DELETE
+        path: /api/v1/assistant/memories/{memoryId}
+      - method: DELETE
+        path: /api/v1/assistant/memories
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api, cinx-assistant]
+    authorization:
+      permissionsAny: [assistant.agent.use.learner]
+      relationship: self
+      attributes:
+        - a memory is saved only by approving a memory.save pending action, and only while consent is granted
+        - withdrawing consent deletes every memory of the caller
+        - contact and payment details are refused (400 MEMORY_SENSITIVE); at most 50 memories
+        - a memory unused in any turn for twelve months is deleted
+      entitlement: null
+      quota: null
+    concealUnauthorizedResource: true
+    audit: security
+
+  - id: assistant.answer-report-self
+    owner: assistant
+    transport: http
+    exposure: user
+    routes:
+      - method: POST
+        path: /api/v1/assistant/turns/{turnId}/report
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api, cinx-assistant]
+    authorization:
+      permissionsAll: []
+      relationship: session-owner
+      attributes:
+        - only the owner of the session may report its completed turn; any other turn answers 404
+        - one report per turn and user; reporting again replaces the reason and note and reopens it
+        - the report copies the question and the answer and is kept 365 days, after a deleted session too
+      entitlement: null
+      quota: null
+    audit: privacy
+
+  - id: assistant.ai-policy-self
+    owner: assistant
+    transport: http
+    exposure: user
+    routes:
+      - method: GET
+        path: /api/v1/assistant/ai-policy
+      - method: POST
+        path: /api/v1/assistant/ai-policy/acceptance
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api, cinx-assistant]
+    authorization:
+      permissionsAll: []
+      relationship: self
+      attributes: []
+      entitlement: null
+      quota: null
+    audit: privacy
+
+  - id: assistant.capability-manage-any
+    owner: assistant
+    transport: http
+    exposure: user
+    routes:
+      - method: GET
+        path: /api/v1/assistant/admin/capabilities
+      - method: PUT
+        path: /api/v1/assistant/admin/capabilities/{capabilityId}
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api, cinx-assistant]
+      mfaRequired: true
+    authorization:
+      permissionsAll: [assistant.capability.manage.any]
+      relationship: null
+      attributes:
+        - listing does not require MFA; switching a capability does
+      entitlement: null
+      quota: null
+    audit: security
+
+  - id: assistant.answer-report-review-any
+    owner: assistant
+    transport: http
+    exposure: user
+    routes:
+      - method: GET
+        path: /api/v1/assistant/admin/answer-reports
+      - method: PATCH
+        path: /api/v1/assistant/admin/answer-reports/{reportId}
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api, cinx-assistant]
+    authorization:
+      permissionsAll: [assistant.capability.manage.any]
+      relationship: null
+      attributes:
+        - reports carry a learner's message and the answer; instructors never see them
+        - a review only sets REVIEWED or DISMISSED, so no MFA
+      entitlement: null
+      quota: null
+    audit: privacy
+
+releaseChecks:
+  - Every controller route and WebSocket destination maps to exactly one operation or family.
+  - Public operations prove that protected fields and content are excluded.
+  - Every .self or .own permission has an owning-service relationship test.
+  - Every internal operation validates service token kind, exact audience, client and permission.
+  - Every commercial feature has both entitlement-allowed and entitlement-denied tests.
+  - Every metered feature tests duplicate requests, concurrency and reservation recovery.
+  - Provider callbacks test signature failure, replay, duplicate and out-of-order events.
