@@ -19,4 +19,5 @@ public class OwlWardrobe extends Model {
     private String head;
     private String face;
     private String effect;
+    private String hold;
 }

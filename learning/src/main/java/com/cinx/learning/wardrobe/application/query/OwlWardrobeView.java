@@ -17,7 +17,8 @@ public record OwlWardrobeView(
             String palette,
             String head,
             String face,
-            String effect
+            String effect,
+            String hold
     ) {
     }
 

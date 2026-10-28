@@ -5,6 +5,7 @@ public record EquipOwlSkinsCommand(
         String palette,
         String head,
         String face,
-        String effect
+        String effect,
+        String hold
 ) {
 }

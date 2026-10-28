@@ -5,5 +5,6 @@ public enum OwlSkinSlot {
     PALETTE,
     HEAD,
     FACE,
-    EFFECT
+    EFFECT,
+    HOLD
 }
