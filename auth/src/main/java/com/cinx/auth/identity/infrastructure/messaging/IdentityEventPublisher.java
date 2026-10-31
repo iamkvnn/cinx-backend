@@ -8,8 +8,7 @@ import com.cinx.auth.shared.infrastructure.messaging.OutboxEventPublisher;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
-import java.time.Clock;
-import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -21,17 +20,15 @@ public class IdentityEventPublisher implements IdentityEvents {
 
     private final OutboxEventPublisher outboxEventPublisher;
     private final AuthorizationCatalog catalog;
-    private final Clock clock;
 
     @Override
     public void authorizationChanged(IdentityAccount account, Set<AuthorizationRole> roles) {
-        Instant now = clock.instant();
         outboxEventPublisher.enqueue(
                 UUID.randomUUID().toString(),
                 "IdentityAccount",
                 account.getUserId(),
                 "AuthAuthorizationChanged",
-                2,
+                3,
                 EXCHANGE,
                 "auth.authorization.changed",
                 Map.of(
@@ -39,9 +36,7 @@ public class IdentityEventPublisher implements IdentityEvents {
                         "status", account.getStatus().name(),
                         "roles", roles.stream().map(Enum::name).sorted().toList(),
                         "permissions", catalog.effectivePermissions(roles).stream().sorted().toList(),
-                        "authorizationVersion", account.getAuthorizationVersion(),
-                        "authorizationPolicyVersion", account.getAuthorizationPolicyVersion(),
-                        "effectiveAt", now.toString()),
+                        "changedAt", account.getChangedAt().toInstant(ZoneOffset.UTC).toString()),
                 Map.of());
     }
 }

@@ -1,7 +1,6 @@
 package com.cinx.auth.identity.infrastructure.persistence;
 
 import com.cinx.auth.identity.domain.IdentityStatus;
-import com.cinx.auth.identity.domain.IdentitySyncStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -28,20 +27,11 @@ public class IdentityAccountJpaEntity {
     @Id
     @Column(name = "user_id", length = 255)
     private String userId;
-    @Column(name = "keycloak_subject", unique = true, length = 255)
-    private String keycloakSubject;
-    @Column(length = 320)
-    private String email;
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 40)
     private IdentityStatus status;
-    @Enumerated(EnumType.STRING)
-    @Column(name = "sync_status", nullable = false, length = 40)
-    private IdentitySyncStatus syncStatus;
-    @Column(name = "authorization_version", nullable = false)
-    private Long authorizationVersion;
-    @Column(name = "authorization_policy_version", nullable = false)
-    private Long authorizationPolicyVersion;
+    @Column(name = "changed_at")
+    private LocalDateTime changedAt;
     @Column(name = "ban_reason", length = 100)
     private String banReason;
     @Column(name = "ban_details", length = 2000)

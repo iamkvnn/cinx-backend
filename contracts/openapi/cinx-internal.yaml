@@ -139,7 +139,7 @@ paths:
     get:
       tags: [auth-internal]
       operationId: getAuthorizationState
-      summary: Rehydrate the minimal committed authorization state for one user
+      summary: Get the account status and last authorization change time of one user
       security: [{ serviceBearer: [] }]
       x-cinx-audience: cinx-auth-internal
       x-cinx-token-kind: service
@@ -568,15 +568,15 @@ components:
 
     AuthorizationState:
       type: object
-      required: [userId, status, roles, authorizationVersion, authorizationPolicyVersion, evaluatedAt]
+      description: >
+        A user token is fresh when status is ACTIVE and changedAt is null or not
+        after the token's iat (floored to the second). An unknown user is ACTIVE
+        with changedAt null.
+      required: [userId, status, changedAt, evaluatedAt]
       properties:
         userId: { type: string }
         status: { type: string, enum: [ACTIVE, BANNED] }
-        roles:
-          type: array
-          items: { type: string }
-        authorizationVersion: { type: integer, format: int64, minimum: 1 }
-        authorizationPolicyVersion: { type: integer, format: int64, minimum: 1 }
+        changedAt: { type: string, format: date-time, nullable: true }
         evaluatedAt: { type: string, format: date-time }
 
     ApiResponseUser:

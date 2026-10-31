@@ -69,7 +69,7 @@ channels:
           vhost: /
         bindingVersion: "0.3.0"
     x-delivery: at-least-once
-    x-compatibility: new-v2-full-snapshot
+    x-compatibility: v3-full-snapshot-ordered-by-changedAt
     x-producer:
       service: auth
       implementation: com.cinx.auth.identity.infrastructure.messaging.IdentityEventPublisher
@@ -926,9 +926,6 @@ channels:
       service: user
       implementation: com.cinx.user.profile.infrastructure.messaging.UserEventProducer
     x-consumers:
-      - service: auth
-        queue: auth.user-lifecycle.queue
-        bindingKey: user.profile.onboarded
       - service: commerce
         queue: commerce.user-onboarding.queue
         bindingKey: user.profile.onboarded
@@ -1149,7 +1146,7 @@ operations:
     bindings:
       amqp: { deliveryMode: 2, bindingVersion: "0.3.0" }
     x-producer: auth
-    x-consumers: [notification, reporting]
+    x-consumers: [notification, reporting, commerce]
 
   publishCommerceOrderPaid:
     action: send
@@ -1508,7 +1505,7 @@ components:
       payload:
         $ref: "#/components/schemas/AuthAuthorizationChangedPayload"
       x-event-type: AuthAuthorizationChanged
-      x-event-version: 2
+      x-event-version: 3
 
     CommerceOrderPaid:
       name: CommerceOrderPaid
@@ -1998,7 +1995,7 @@ components:
     AuthAuthorizationChangedPayload:
       type: object
       additionalProperties: false
-      required: [userId, status, roles, permissions, authorizationVersion, authorizationPolicyVersion, effectiveAt]
+      required: [userId, status, roles, permissions, changedAt]
       properties:
         userId: { type: string, minLength: 1 }
         status: { type: string, enum: [ACTIVE, BANNED] }
@@ -2010,9 +2007,7 @@ components:
           type: array
           uniqueItems: true
           items: { type: string, pattern: "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+$" }
-        authorizationVersion: { type: integer, format: int64, minimum: 1 }
-        authorizationPolicyVersion: { type: integer, format: int64, minimum: 1 }
-        effectiveAt:
+        changedAt:
           $ref: "#/components/schemas/Timestamp"
 
     CommerceOrderPaidPayload:

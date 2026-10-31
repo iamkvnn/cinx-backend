@@ -66,8 +66,7 @@ public class SecurityConfig {
     AuthorizationFreshnessVerifier authorizationFreshnessVerifier(IIdentityService identities, Clock clock) {
         return new AuthorizationFreshnessVerifier(userId -> {
             var state = identities.authorizationState(userId);
-            return new AuthorizationState(state.userId(), state.status().name(), state.authorizationVersion(),
-                    state.authorizationPolicyVersion(), state.evaluatedAt());
+            return new AuthorizationState(state.userId(), state.status().name(), state.changedAt(), state.evaluatedAt());
         }, clock, Duration.ZERO);
     }
 

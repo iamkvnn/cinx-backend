@@ -1,7 +1,6 @@
 package com.cinx.auth.identity.application;
 
 import com.cinx.auth.identity.application.command.BanUserCommand;
-import com.cinx.auth.identity.application.command.LinkIdentityCommand;
 import com.cinx.auth.identity.application.command.UpdateStaffRolesCommand;
 import com.cinx.auth.identity.application.query.AuthorizationState;
 import com.cinx.auth.identity.application.query.IdentityAccountView;
@@ -10,7 +9,6 @@ import java.util.List;
 
 public interface IIdentityService {
     IdentityAccountView findAccount(String userId);
-    IdentityAccountView link(String userId, LinkIdentityCommand command);
     IdentityAccountView ban(String userId, BanUserCommand command);
     IdentityAccountView unban(String userId);
     IdentityAccountView promoteInstructor(String userId);

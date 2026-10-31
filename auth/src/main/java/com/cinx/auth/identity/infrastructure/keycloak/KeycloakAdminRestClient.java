@@ -12,11 +12,16 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.EnumSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 @Component
@@ -24,6 +29,8 @@ import java.util.Set;
 public class KeycloakAdminRestClient implements KeycloakAdminClient {
     private static final Set<String> CINX_ROLES = java.util.Arrays.stream(AuthorizationRole.values())
             .map(Enum::name).collect(java.util.stream.Collectors.toUnmodifiableSet());
+
+    private static final int PAGE_SIZE = 100;
 
     private final RestClient restClient;
     private final String realm;
@@ -45,86 +52,112 @@ public class KeycloakAdminRestClient implements KeycloakAdminClient {
     }
 
     @Override
-    public void synchronizeAuthorization(String keycloakSubject, String userId, boolean enabled,
-                                         Set<AuthorizationRole> roles, long authorizationVersion,
-                                         long policyVersion, Instant authorizationNotAfter) {
-        Map<String, List<String>> attributes = new java.util.LinkedHashMap<>();
-        attributes.put("uid", List.of(userId));
-        attributes.put("authorization_version", List.of(String.valueOf(authorizationVersion)));
-        attributes.put("authorization_policy_version", List.of(String.valueOf(policyVersion)));
-        if (authorizationNotAfter != null) {
-            attributes.put("authz_not_after", List.of(String.valueOf(authorizationNotAfter.getEpochSecond())));
+    public Optional<KeycloakUser> findUser(String subject) {
+        try {
+            Map<String, Object> user = getUser(subject);
+            return Optional.ofNullable(user).map(found -> new KeycloakUser(subject,
+                    found.get("email") == null ? null : String.valueOf(found.get("email")),
+                    Boolean.TRUE.equals(found.get("enabled"))));
+        } catch (HttpClientErrorException.NotFound missing) {
+            return Optional.empty();
         }
-        // Keycloak validates a PUT against the user profile (email and name are required), so send the whole user back
-        Map<String, Object> user = restClient.get()
-                .uri("/admin/realms/{realm}/users/{subject}", realm, keycloakSubject)
+    }
+
+    @Override
+    public Set<AuthorizationRole> directRoles(String subject) {
+        return cinxRoles(roleMappings("/admin/realms/{realm}/users/{subject}/role-mappings/realm", subject));
+    }
+
+    @Override
+    public Set<AuthorizationRole> effectiveRoles(String subject) {
+        return cinxRoles(roleMappings("/admin/realms/{realm}/users/{subject}/role-mappings/realm/composite", subject));
+    }
+
+    @Override
+    public void addRoles(String subject, Set<AuthorizationRole> roles) {
+        if (roles.isEmpty()) return;
+        restClient.post()
+                .uri("/admin/realms/{realm}/users/{subject}/role-mappings/realm", realm, subject)
                 .headers(headers -> headers.setBearerAuth(accessToken()))
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(representations(roles))
                 .retrieve()
-                .body(new ParameterizedTypeReference<Map<String, Object>>() {});
-        Map<String, Object> representation = user == null ? new java.util.LinkedHashMap<>() : new java.util.LinkedHashMap<>(user);
-        Map<String, Object> merged = new java.util.LinkedHashMap<>();
-        if (representation.get("attributes") instanceof Map<?, ?> existing) {
-            existing.forEach((key, value) -> merged.put(String.valueOf(key), value));
-        }
-        merged.putAll(attributes);
+                .toBodilessEntity();
+    }
+
+    @Override
+    public void removeRoles(String subject, Set<AuthorizationRole> roles) {
+        if (roles.isEmpty()) return;
+        restClient.method(HttpMethod.DELETE)
+                .uri("/admin/realms/{realm}/users/{subject}/role-mappings/realm", realm, subject)
+                .headers(headers -> headers.setBearerAuth(accessToken()))
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(representations(roles))
+                .retrieve()
+                .toBodilessEntity();
+    }
+
+    @Override
+    public void setEnabled(String subject, boolean enabled) {
+        // Keycloak validates a PUT against the user profile (email and name are required), so send the whole user back
+        Map<String, Object> user = getUser(subject);
+        Map<String, Object> representation = user == null ? new LinkedHashMap<>() : new LinkedHashMap<>(user);
         representation.put("enabled", enabled);
-        representation.put("attributes", merged);
         restClient.put()
-                .uri("/admin/realms/{realm}/users/{subject}", realm, keycloakSubject)
+                .uri("/admin/realms/{realm}/users/{subject}", realm, subject)
                 .headers(headers -> headers.setBearerAuth(accessToken()))
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(representation)
                 .retrieve()
                 .toBodilessEntity();
-        replaceRoles(keycloakSubject, roles);
-    }
-
-    private void replaceRoles(String keycloakSubject, Set<AuthorizationRole> roles) {
-        List<Map<String, Object>> currentRoles = currentRoles(keycloakSubject).stream()
-                .filter(value -> CINX_ROLES.contains(String.valueOf(value.get("name"))))
-                .toList();
-        if (!currentRoles.isEmpty()) {
-            restClient.method(HttpMethod.DELETE)
-                    .uri("/admin/realms/{realm}/users/{subject}/role-mappings/realm", realm, keycloakSubject)
-                    .headers(headers -> headers.setBearerAuth(accessToken()))
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(currentRoles)
-                    .retrieve()
-                    .toBodilessEntity();
-        }
-
-        List<Map<String, Object>> desiredRoles = roles.stream().map(role -> restClient.get()
-                        .uri("/admin/realms/{realm}/roles/{role}", realm, role.name())
-                        .headers(headers -> headers.setBearerAuth(accessToken()))
-                        .retrieve().body(new ParameterizedTypeReference<Map<String, Object>>() {}))
-                .filter(java.util.Objects::nonNull).toList();
-        if (!desiredRoles.isEmpty()) {
-            restClient.post()
-                    .uri("/admin/realms/{realm}/users/{subject}/role-mappings/realm", realm, keycloakSubject)
-                    .headers(headers -> headers.setBearerAuth(accessToken()))
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(desiredRoles)
-                    .retrieve()
-                    .toBodilessEntity();
-        }
     }
 
     @Override
-    public void revokeSessions(String keycloakSubject) {
-        restClient.post()
-                .uri("/admin/realms/{realm}/users/{subject}/logout", realm, keycloakSubject)
-                .headers(headers -> headers.setBearerAuth(accessToken()))
-                .retrieve()
-                .toBodilessEntity();
+    public List<String> enabledUsersWithRole(AuthorizationRole role) {
+        List<String> result = new ArrayList<>();
+        for (int first = 0; ; first += PAGE_SIZE) {
+            List<Map<String, Object>> page = restClient.get()
+                    .uri("/admin/realms/{realm}/roles/{role}/users?first={first}&max={max}", realm, role.name(), first, PAGE_SIZE)
+                    .headers(headers -> headers.setBearerAuth(accessToken()))
+                    .retrieve()
+                    .body(new ParameterizedTypeReference<>() {});
+            if (page == null || page.isEmpty()) return result;
+            page.stream().filter(user -> Boolean.TRUE.equals(user.get("enabled")))
+                    .map(user -> String.valueOf(user.get("id"))).forEach(result::add);
+            if (page.size() < PAGE_SIZE) return result;
+        }
     }
 
-    private List<Map<String, Object>> currentRoles(String keycloakSubject) {
+    private Map<String, Object> getUser(String subject) {
+        return restClient.get()
+                .uri("/admin/realms/{realm}/users/{subject}", realm, subject)
+                .headers(headers -> headers.setBearerAuth(accessToken()))
+                .retrieve()
+                .body(new ParameterizedTypeReference<Map<String, Object>>() {});
+    }
+
+    private List<Map<String, Object>> roleMappings(String uri, String subject) {
         List<Map<String, Object>> roles = restClient.get()
-                .uri("/admin/realms/{realm}/users/{subject}/role-mappings/realm", realm, keycloakSubject)
+                .uri(uri, realm, subject)
                 .headers(headers -> headers.setBearerAuth(accessToken()))
                 .retrieve()
                 .body(new ParameterizedTypeReference<>() {});
         return roles == null ? List.of() : roles;
+    }
+
+    private Set<AuthorizationRole> cinxRoles(List<Map<String, Object>> mappings) {
+        Set<AuthorizationRole> roles = EnumSet.noneOf(AuthorizationRole.class);
+        mappings.stream().map(value -> String.valueOf(value.get("name"))).filter(CINX_ROLES::contains)
+                .map(AuthorizationRole::valueOf).forEach(roles::add);
+        return roles;
+    }
+
+    private List<Map<String, Object>> representations(Set<AuthorizationRole> roles) {
+        return roles.stream().map(role -> restClient.get()
+                        .uri("/admin/realms/{realm}/roles/{role}", realm, role.name())
+                        .headers(headers -> headers.setBearerAuth(accessToken()))
+                        .retrieve().body(new ParameterizedTypeReference<Map<String, Object>>() {}))
+                .filter(java.util.Objects::nonNull).toList();
     }
 
     private String accessToken() {

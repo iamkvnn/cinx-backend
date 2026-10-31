@@ -4,7 +4,6 @@ import com.cinx.auth.identity.application.IIdentityService;
 
 import com.cinx.auth.identity.api.dto.request.BanUserRequest;
 import com.cinx.auth.identity.api.dto.IdentityAccountResponse;
-import com.cinx.auth.identity.api.dto.LinkIdentityRequest;
 import com.cinx.auth.identity.api.mapper.IdentityAccountMapper;
 import com.cinx.common.dto.ApiResponse;
 import com.cinx.common.utils.AuthenticationUtil;
@@ -33,17 +32,6 @@ public class IdentityController {
     @Operation(security = @SecurityRequirement(name = "bearer-jwt"))
     ApiResponse<IdentityAccountResponse> findAccount(@PathVariable String userId) {
         return ApiResponse.success("Account fetched successfully", mapper.toDto(identityService.findAccount(userId)));
-    }
-
-    @PostMapping("/{userId}/link")
-    @PreAuthorize("hasAuthority('PERM_auth.account.read.any')")
-    @Operation(security = @SecurityRequirement(name = "bearer-jwt"))
-    ApiResponse<IdentityAccountResponse> link(
-            @PathVariable String userId,
-            @Valid @RequestBody LinkIdentityRequest request
-    ) {
-        return new ApiResponse<>(true, "Identity linked successfully",
-                mapper.toDto(identityService.link(userId, mapper.toCommand(request))));
     }
 
     @PostMapping("/{userId}/suspend")

@@ -3,7 +3,8 @@ package com.cinx.auth.identity.infrastructure.keycloak;
 import com.cinx.auth.identity.application.KeycloakAdminClient;
 
 import com.cinx.auth.identity.domain.AuthorizationRole;
-import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
@@ -16,14 +17,37 @@ public class DisabledKeycloakAdminClient implements KeycloakAdminClient {
     }
 
     @Override
-    public void synchronizeAuthorization(String keycloakSubject, String userId, boolean enabled,
-                                         Set<AuthorizationRole> roles, long authorizationVersion,
-                                         long policyVersion, Instant authorizationNotAfter) {
+    public Optional<KeycloakUser> findUser(String subject) {
         throw disabled();
     }
 
     @Override
-    public void revokeSessions(String keycloakSubject) {
+    public Set<AuthorizationRole> directRoles(String subject) {
+        throw disabled();
+    }
+
+    @Override
+    public Set<AuthorizationRole> effectiveRoles(String subject) {
+        throw disabled();
+    }
+
+    @Override
+    public void addRoles(String subject, Set<AuthorizationRole> roles) {
+        throw disabled();
+    }
+
+    @Override
+    public void removeRoles(String subject, Set<AuthorizationRole> roles) {
+        throw disabled();
+    }
+
+    @Override
+    public void setEnabled(String subject, boolean enabled) {
+        throw disabled();
+    }
+
+    @Override
+    public List<String> enabledUsersWithRole(AuthorizationRole role) {
         throw disabled();
     }
 }
