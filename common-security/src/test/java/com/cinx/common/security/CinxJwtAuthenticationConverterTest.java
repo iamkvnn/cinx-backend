@@ -27,7 +27,7 @@ class CinxJwtAuthenticationConverterTest {
     }
 
     @Test
-    void prefersStableUidAndConvertsKeycloakRolesAndScopes() {
+    void usesTheSubjectEvenWhenALegacyUidIsPresentAndConvertsKeycloakRolesAndScopes() {
         Jwt jwt = jwt(Map.of(
                 "sub", "keycloak-subject",
                 "uid", "cinx-user-id",
@@ -37,7 +37,7 @@ class CinxJwtAuthenticationConverterTest {
 
         var authentication = converter.convert(jwt);
 
-        assertThat(authentication.getName()).isEqualTo("cinx-user-id");
+        assertThat(authentication.getName()).isEqualTo("keycloak-subject");
         assertThat(authentication.getAuthorities())
                 .extracting("authority")
                 .contains("ROLE_INSTRUCTOR", "SCOPE_openid", "SCOPE_courses:write")

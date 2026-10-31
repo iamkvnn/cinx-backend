@@ -55,11 +55,7 @@ public class CinxJwtAuthenticationConverter implements Converter<Jwt, AbstractAu
         addPermissions(jwt, authorities);
         addScopes(jwt, authorities);
 
-        String principal = jwt.getClaimAsString("uid");
-        if (principal == null || principal.isBlank()) {
-            principal = jwt.getSubject();
-        }
-        return new JwtAuthenticationToken(jwt, authorities, principal);
+        return new JwtAuthenticationToken(jwt, authorities, jwt.getSubject());
     }
 
     private void addDirectRoles(Jwt jwt, Set<GrantedAuthority> authorities) {
