@@ -20,16 +20,10 @@ public final class AuthorizationFreshnessFilter extends OncePerRequestFilter {
     public AuthorizationFreshnessFilter(AuthorizationFreshnessVerifier verifier) { this.verifier = verifier; }
 
     @Override
-    protected boolean shouldNotFilter(HttpServletRequest request) {
-        return "POST".equals(request.getMethod())
-                && "/api/v1/profiles/me/onboarding".equals(request.getRequestURI());
-    }
-
-    @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        // Service tokens have no authz_ver, and this servlet-wide filter also sees /internal/** calls.
+        // Service tokens have no user state, and this servlet-wide filter also sees /internal/** calls.
         if (authentication instanceof JwtAuthenticationToken jwt
                 && !"service".equals(jwt.getToken().getClaimAsString("token_kind"))
                 && !verifier.isCurrent(jwt.getToken())) {

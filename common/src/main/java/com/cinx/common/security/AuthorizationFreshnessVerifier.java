@@ -21,10 +21,8 @@ public final class AuthorizationFreshnessVerifier {
     }
 
     public boolean isCurrent(Jwt jwt) {
-        String userId = jwt.getClaimAsString("uid");
-        if (userId == null || userId.isBlank()) userId = jwt.getSubject();
-        Object tokenVersion = jwt.getClaims().get("authz_ver");
-        if (userId == null || userId.isBlank() || !(tokenVersion instanceof Number number)) return false;
+        String userId = jwt.getSubject();
+        if (userId == null || userId.isBlank() || jwt.getIssuedAt() == null) return false;
         Instant now = clock.instant();
         Cached cached = cache.get(userId);
         if (cached == null || !now.isBefore(cached.loadedAt.plus(maximumAge))) {
@@ -39,13 +37,17 @@ public final class AuthorizationFreshnessVerifier {
             cache.put(userId, cached);
         }
         return "ACTIVE".equals(cached.state.status())
-                && number.longValue() >= cached.state.authorizationVersion();
+                && TokenFreshness.issuedAfterChange(jwt.getIssuedAt(), cached.state.changedAt());
     }
 
     public void acceptSnapshot(AuthorizationState state) {
-        cache.compute(state.userId(), (ignored, existing) -> existing == null
-                || state.authorizationVersion() > existing.state.authorizationVersion()
+        cache.compute(state.userId(), (ignored, existing) -> existing == null || isNewer(state, existing.state)
                 ? new Cached(state, clock.instant()) : existing);
+    }
+
+    private static boolean isNewer(AuthorizationState candidate, AuthorizationState current) {
+        if (candidate.changedAt() == null) return false;
+        return current.changedAt() == null || candidate.changedAt().isAfter(current.changedAt());
     }
 
     private record Cached(AuthorizationState state, Instant loadedAt) {}

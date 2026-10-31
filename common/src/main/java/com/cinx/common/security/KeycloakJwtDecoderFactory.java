@@ -9,7 +9,6 @@ import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 
 import java.util.List;
-import java.time.Clock;
 import java.util.Set;
 
 /**
@@ -42,7 +41,6 @@ public final class KeycloakJwtDecoderFactory {
         validators.add(issuerAndTime);
         validators.add(audienceValidator);
         validators.add(CinxJwtValidators.tokenKind(tokenKind));
-        validators.add(CinxJwtValidators.authorizationNotAfter(Clock.systemUTC()));
         if (!allowedClients.isEmpty()) validators.add(CinxJwtValidators.authorizedParty(allowedClients));
         decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(validators));
         return decoder;

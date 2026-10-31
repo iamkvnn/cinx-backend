@@ -9,10 +9,7 @@ public class AuthenticationUtil {
     public static String extractUserId() {
         Authentication authentication = getAuthentication();
         if (authentication != null && authentication.getPrincipal() instanceof Jwt jwt) {
-            String uid = jwt.getClaimAsString("uid");
-            if (uid != null && !uid.isBlank()) {
-                return uid;
-            }
+            return jwt.getSubject();
         }
         if (authentication != null
                 && authentication.isAuthenticated()
