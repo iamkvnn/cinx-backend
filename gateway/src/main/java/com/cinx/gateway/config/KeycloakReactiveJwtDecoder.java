@@ -8,7 +8,6 @@ import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusReactiveJwtDecoder;
 import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
 
-import java.time.Clock;
 
 final class KeycloakReactiveJwtDecoder {
     private KeycloakReactiveJwtDecoder() {
@@ -24,8 +23,7 @@ final class KeycloakReactiveJwtDecoder {
                 JwtValidators.createDefaultWithIssuer(issuer),
                 new JwtClaimValidator<java.util.List<String>>("aud",
                         audiences -> audiences != null && audiences.contains(audience)),
-                CinxJwtValidators.tokenKind("user"),
-                CinxJwtValidators.authorizationNotAfter(Clock.systemUTC())));
+                CinxJwtValidators.tokenKind("user")));
         return decoder;
     }
 }

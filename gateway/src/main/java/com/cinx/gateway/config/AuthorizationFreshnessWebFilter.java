@@ -1,5 +1,6 @@
 package com.cinx.gateway.config;
 
+import com.cinx.common.security.TokenFreshness;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.springframework.http.MediaType;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
@@ -27,26 +28,21 @@ final class AuthorizationFreshnessWebFilter implements WebFilter {
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
-        if (exchange.getRequest().getMethod() == org.springframework.http.HttpMethod.POST
-                && "/api/v1/profiles/me/onboarding".equals(exchange.getRequest().getPath().value())) {
-            return chain.filter(exchange);
-        }
         return exchange.getPrincipal().map(java.util.Optional::of)
                 .defaultIfEmpty(java.util.Optional.empty()).flatMap(optional -> {
             Object principal = optional.orElse(null);
             if (!(principal instanceof JwtAuthenticationToken authentication)) return chain.filter(exchange);
-            String userId = authentication.getToken().getClaimAsString("uid");
-            if (userId == null || userId.isBlank()) userId = authentication.getToken().getSubject();
-            Object version = authentication.getToken().getClaims().get("authz_ver");
-            if (userId == null || userId.isBlank() || !(version instanceof Number number)) return stale(exchange);
+            String userId = authentication.getToken().getSubject();
+            Instant issuedAt = authentication.getToken().getIssuedAt();
+            if (userId == null || userId.isBlank() || issuedAt == null) return stale(exchange);
             String expectedUserId = userId;
             Cached cached = cache.get(userId);
             if (cached != null && clock.instant().isBefore(cached.loadedAt.plusSeconds(5))) {
-                return allowed(userId, cached.state, number.longValue()) ? chain.filter(exchange) : stale(exchange);
+                return allowed(userId, cached.state, issuedAt) ? chain.filter(exchange) : stale(exchange);
             }
             return load(expectedUserId).flatMap(state -> {
                 cache.put(expectedUserId, new Cached(state, clock.instant()));
-                return allowed(expectedUserId, state, number.longValue()) ? chain.filter(exchange) : stale(exchange);
+                return allowed(expectedUserId, state, issuedAt) ? chain.filter(exchange) : stale(exchange);
             }).onErrorResume(failure -> stale(exchange));
         });
     }
@@ -64,9 +60,9 @@ final class AuthorizationFreshnessWebFilter implements WebFilter {
                 .map(Response::data);
     }
 
-    private boolean allowed(String userId, State state, long tokenVersion) {
+    private boolean allowed(String userId, State state, Instant issuedAt) {
         return state != null && userId.equals(state.userId) && "ACTIVE".equals(state.status)
-                && tokenVersion >= state.authorizationVersion;
+                && TokenFreshness.issuedAfterChange(issuedAt, state.changedAt);
     }
 
     private Mono<Void> stale(ServerWebExchange exchange) {
@@ -77,6 +73,5 @@ final class AuthorizationFreshnessWebFilter implements WebFilter {
     private record Cached(State state, Instant loadedAt) {}
     private record Token(@JsonProperty("access_token") String accessToken) {}
     private record Response(boolean success, String message, State data) {}
-    private record State(String userId, String status, long authorizationVersion,
-                         long authorizationPolicyVersion, Instant evaluatedAt) {}
+    private record State(String userId, String status, Instant changedAt, Instant evaluatedAt) {}
 }
