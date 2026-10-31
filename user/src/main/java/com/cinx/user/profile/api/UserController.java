@@ -8,6 +8,7 @@ import com.cinx.user.profile.api.dto.UpdateProfileRequest;
 import com.cinx.user.profile.api.dto.UserDto;
 import com.cinx.user.instructor.api.dto.request.InstructorApplicationRequest;
 import com.cinx.user.instructor.api.dto.request.TerminatePartnershipRequest;
+import com.cinx.user.profile.api.dto.request.UpdateEffectsRequest;
 import com.cinx.user.profile.api.dto.request.UpdatePreferredCategoriesRequest;
 import com.cinx.user.profile.api.mapper.UserMapper;
 import com.cinx.user.profile.application.IUserService;
@@ -116,5 +117,13 @@ public class UserController {
         String userId = AuthenticationUtil.extractUserId();
         userService.updatePreferredCategories(userId, request.categoryIds());
         return new ApiResponse<>(true, "Preferred categories updated successfully", null);
+    }
+
+    @Operation(summary = "Turn decorative animations on or off for the caller", security = @SecurityRequirement(name = "bearer-jwt"))
+    @PutMapping("/profiles/me/effects")
+    @PreAuthorize("hasAuthority('PERM_user.profile.update.self')")
+    public ApiResponse<UserDto> updateEffects(@Valid @RequestBody UpdateEffectsRequest request) {
+        String userId = AuthenticationUtil.extractUserId();
+        return new ApiResponse<>(true, "Effects preference updated successfully", userMapper.toDto(userService.updateEffects(userId, request.enabled())));
     }
 }

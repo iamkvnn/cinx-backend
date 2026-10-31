@@ -48,6 +48,9 @@ public class UserJpaEntity extends AuditableEntity {
     @Builder.Default
     @Column(columnDefinition = "boolean default false")
     private Boolean isPartnershipTerminated = false;
+    @Builder.Default
+    @Column(nullable = false)
+    private Boolean effectsEnabled = true;
     private String userId;
     private String cvFileKey;
     private String cvUrl;

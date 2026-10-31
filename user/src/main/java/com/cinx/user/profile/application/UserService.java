@@ -351,6 +351,14 @@ public class UserService implements IUserService {
     }
 
     @Override
+    @Transactional
+    public UserView updateEffects(String userId, boolean enabled) {
+        User user = getOrThrowByUserId(userId);
+        user.setEffectsEnabled(enabled);
+        return UserView.of(userRepository.save(user));
+    }
+
+    @Override
     public long countTotalUsers() {
         return userQueries.countTotalUsers();
     }

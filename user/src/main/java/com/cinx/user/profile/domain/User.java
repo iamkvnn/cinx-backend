@@ -38,6 +38,9 @@ public class User {
     private Boolean isReceivePushNotification = false;
     @Builder.Default
     private Boolean isPartnershipTerminated = false;
+    /** Whether decorative animations play for this person (the owl, celebrations); interface motion is not affected. */
+    @Builder.Default
+    private Boolean effectsEnabled = true;
     private String cvFileKey;
     private String cvUrl;
     @Builder.Default

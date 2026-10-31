@@ -26,6 +26,7 @@ public record UserDto(
         @Schema(example = "POLICY_VIOLATION") PartnershipTerminationReasonType partnershipTerminationReasonType,
         @Schema(example = "Repeated policy violations after multiple warnings") String partnershipTerminationReasonDetail,
         @Schema(example = "false") Boolean isPartnershipTerminated,
-        @Schema(example = "PENDING") InstructorApplicationStatus instructorApplicationStatus
+        @Schema(example = "PENDING") InstructorApplicationStatus instructorApplicationStatus,
+        @Schema(example = "true", description = "Whether decorative animations play for this person") Boolean effectsEnabled
 ) {
 }

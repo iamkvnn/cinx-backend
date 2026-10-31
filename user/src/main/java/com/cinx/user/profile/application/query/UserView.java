@@ -27,7 +27,8 @@ public record UserView(
         PartnershipTerminationReasonType partnershipTerminationReasonType,
         String partnershipTerminationReasonDetail,
         Boolean isPartnershipTerminated,
-        InstructorApplicationStatus instructorApplicationStatus) {
+        InstructorApplicationStatus instructorApplicationStatus,
+        Boolean effectsEnabled) {
 
     public static UserView of(User user) {
         return new UserView(user.getUserId(), user.getName(), user.getEmail(), user.getGender(),
@@ -35,6 +36,6 @@ public record UserView(
                 user.getPhoneNumber(), user.getBio(), user.getCvUrl(), user.getCreatedAt(), user.getUpdatedAt(),
                 user.getLastAccessAt(), user.getInstructorVerifiedAt(), user.getPartnershipTerminatedAt(),
                 user.getPartnershipTerminationReasonType(), user.getPartnershipTerminationReasonDetail(),
-                user.getIsPartnershipTerminated(), user.getInstructorApplicationStatus());
+                user.getIsPartnershipTerminated(), user.getInstructorApplicationStatus(), user.getEffectsEnabled());
     }
 }
