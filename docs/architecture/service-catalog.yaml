@@ -245,12 +245,12 @@ services:
     synchronousDependencies:
       - target: keycloak
         transport: REST
-        purpose: "Admin token, enable/disable account, realm role replacement, session revocation"
+        purpose: "Admin token, enable/disable account, realm role add/remove, role member lookup"
         paths:
           - /realms/{realm}/protocol/openid-connect/token
           - /admin/realms/{realm}/users/{subject}
           - /admin/realms/{realm}/users/{subject}/role-mappings/realm
-          - /admin/realms/{realm}/users/{subject}/logout
+          - /admin/realms/{realm}/roles/{role}/users
     publishes:
       - exchange: auth.events.exchange
         delivery: transactional-outbox
@@ -260,7 +260,6 @@ services:
       - exchange: user.events.exchange
         queue: auth.user-lifecycle.queue
         routingKeys:
-          - user.profile.onboarded
           - user.instructor.verified
           - user.instructor.terminated
     externalDependencies:
@@ -302,7 +301,7 @@ services:
     synchronousDependencies:
       - target: auth
         transport: HTTP
-        purpose: bounded authorization-state rehydration
+        purpose: token freshness check (status and changedAt, cached for at most five seconds)
         paths: ["/internal/identity/accounts/{userId}/authorization-state"]
     publishes:
       - exchange: user.events.exchange
@@ -361,7 +360,7 @@ services:
     synchronousDependencies:
       - target: auth
         transport: HTTP
-        purpose: bounded authorization-state rehydration
+        purpose: token freshness check (status and changedAt, cached for at most five seconds)
         paths: ["/internal/identity/accounts/{userId}/authorization-state"]
     publishes:
       - exchange: cinx.domain.events
@@ -438,7 +437,7 @@ services:
     synchronousDependencies:
       - target: auth
         transport: HTTP
-        purpose: bounded authorization-state rehydration
+        purpose: token freshness check (status and changedAt, cached for at most five seconds)
         paths: ["/internal/identity/accounts/{userId}/authorization-state"]
       - target: user
         transport: openfeign
@@ -538,7 +537,7 @@ services:
           - /internal/users/{id}
       - target: auth
         transport: openfeign
-        purpose: capability recipients and bounded authorization-state rehydration
+        purpose: capability recipients and token freshness check (status and changedAt, cached for at most five seconds)
         paths:
           - /internal/identity/permissions/{permission}/user-ids
           - /internal/identity/accounts/{userId}/authorization-state
@@ -612,7 +611,7 @@ services:
     synchronousDependencies:
       - target: auth
         transport: HTTP
-        purpose: bounded authorization-state rehydration
+        purpose: token freshness check (status and changedAt, cached for at most five seconds)
         paths: ["/internal/identity/accounts/{userId}/authorization-state"]
     publishes: []
     consumes:
@@ -648,7 +647,7 @@ services:
     synchronousDependencies:
       - target: auth
         transport: HTTP
-        purpose: rehydrate required authorization version within the five-second freshness bound
+        purpose: token freshness check (status and changedAt) within the five-second cache bound
         paths: ["/internal/identity/accounts/{userId}/authorization-state"]
         authentication: service-jwt
     publishes: []
@@ -714,7 +713,7 @@ services:
     synchronousDependencies:
       - target: auth
         transport: HTTP
-        purpose: rehydrate required authorization version within the five-second freshness bound
+        purpose: token freshness check (status and changedAt) within the five-second cache bound
         paths: ["/internal/identity/accounts/{userId}/authorization-state"]
         authentication: service-jwt (cinx-assistant-service)
       - target: commerce

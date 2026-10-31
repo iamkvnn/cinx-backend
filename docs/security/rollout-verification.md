@@ -94,7 +94,7 @@ contract version. Do not encode unresolved choices as scattered conditionals.
 |---|---|---|
 | 0 | Existing release blockers closed and trustworthy green baseline | no new feature |
 | 1 | Keycloak/JWT permission foundation and exhaustive route inventory | permission claims observed |
-| 2 | Auth DB multi-role authority and reconciliation | auth is assignment writer |
+| 2 | Keycloak-owned roles, thin auth admin layer, token freshness | auth announces changes |
 | 3 | Permissions, ownership, internal JWT and WebSocket enforced | security model active |
 | 4 | Plan/subscription/billing aggregate and provider boundary | billing sandbox only, then limited production |
 | 5 | Entitlement event, local projections and course access model | subscription feature access active |
@@ -170,7 +170,7 @@ Add as version-controlled authorization/realm configuration:
 - one confidential client/service account per real calling service;
 - granular permission client roles;
 - additive human composite roles;
-- protocol mappers for `uid`, `roles`, `permissions`, `token_kind` and audience;
+- protocol mappers for `roles`, `permissions`, `token_kind` and audience;
 - staff MFA flows;
 - least-privilege `cinx-auth-admin` service account.
 
@@ -189,9 +189,8 @@ Realm validation must assert configuration semantics, not only valid JSON:
 1. Deploy `common-security` converter support for `permissions` ->
    `PERM_*`, exact CINX role filtering and service-token claims.
 2. Keep current compatible `ROLE_*` behavior while old tokens may exist.
-3. Configure Keycloak to issue new claims including `authz_policy_ver`,
-   `authz_not_after`, `acr`, `amr` and `auth_time`, then inspect decoded test
-   tokens.
+3. Configure Keycloak to issue new claims including `acr`, `amr` and
+   `auth_time`, then inspect decoded test tokens.
 4. Deploy gateway and resource services with the new converter.
 5. Switch endpoint expressions to `PERM_*` only in Phase 3.
 6. After at least the maximum access-token lifetime, remove the broad
@@ -213,39 +212,32 @@ and service token.
   boundary where applicable.
 - All affected converter consumers compile/test together.
 
-## 7. Phase 2 — auth DB multi-role and reconciliation
+## 7. Phase 2 — Keycloak-owned roles and thin auth admin layer
 
 ### Work
 
-1. Add the next auth Flyway migration:
-   - stable `identity_account.user_id` and unique Keycloak subject;
-   - account status/sync status/authorization version;
-   - `identity_account_role` with actor, source, grant/expiry;
-   - authorization audit/command and durable Keycloak sync work.
-2. Replace single-role APIs with set-based grant/revoke/reconcile operations.
-3. Make auth DB the only application writer for status and role assignment.
+1. Add the next auth Flyway migration (`V4__keycloak_owned_roles.sql`):
+   - `identity_account` keeps `user_id` (the Keycloak `sub`), status, ban
+     fields and `changed_at`;
+   - drop the role, sync-job, authorization-version and email/subject columns
+     and tables;
+   - keep `authorization_audit`.
+2. Replace single-role APIs with set-based role operations that call the
+   Keycloak admin API synchronously.
+3. Make Keycloak the owner of realm roles (`LEARNER` from the realm default
+   roles); auth records status, `changed_at`, audit and the outbox event in the
+   same DB transaction as the Keycloak call.
 4. Keep credentials, sessions and token issuance in Keycloak.
 5. Remove `INSTRUCTOR_APPLICANT` from authorization roles. User service owns
-   the application workflow; approval asks auth to grant `INSTRUCTOR`.
-6. Make DB commit the durability boundary. Reconcile Keycloak asynchronously
-   with retry/backoff and drift detection.
-7. Increment `authorization_version` on status/role changes.
-8. Revoke sessions on suspension or privilege reduction. Deploy the required
-   status/version denial projection/cache and authenticated rehydration path;
-   short access-token TTL is defense in depth, not the revocation boundary.
-9. Publish a new full authorization event version with roles, permissions and
-   monotonic authorization version.
-10. Add an indexed, injected-`Clock` expiry worker. It must lock/recheck due
-    grants, transition `ACTIVE -> EXPIRED`, increment the per-user version,
-    audit, and atomically create Keycloak sync work plus the full outbox
-    snapshot. Permission calculations and membership queries must exclude
-    expired grants before the worker materializes the status.
-11. Project the earliest time-bound grant deadline as `authz_not_after` and
-    enforce it at gateway/resource servers. Break-glass expiry also uses
-    high-priority session revocation and the immediate denial/version path.
-12. For a role-bundle/catalog change, durably enumerate every affected user and
-    increment each per-user `authorization_version` before publishing their new
-    snapshot; do not rely on policy version alone for consumer ordering.
+   the application workflow; verification/termination events make auth add or
+   remove `INSTRUCTOR` in Keycloak.
+6. Set the Keycloak user `enabled` flag on suspend/ban and reactivate.
+7. Serve `GET /internal/identity/accounts/{userId}/authorization-state`
+   (`status`, `changedAt`) and deploy the freshness check (iat against
+   `changedAt`, cache of at most five seconds) in the gateway, `common` and the
+   Python services.
+8. Publish `auth.authorization.changed` version 3 with roles, permissions and
+   `changedAt`; consumers order by `changedAt`.
 
 Because the system is unreleased, dev data can be recreated. Still test both a
 fresh schema and the migration path supported by the repository.
@@ -262,19 +254,16 @@ fresh schema and the migration path supported by the repository.
 
 ### Gate
 
-- Concurrent grants do not lose another role.
+- Concurrent role commands do not lose another role.
 - Duplicate commands/events are successful no-ops.
-- Auth DB change survives temporary Keycloak outage and later converges.
-- Direct Keycloak drift is detected and corrected from auth state.
+- A role/status command fails as a whole when the Keycloak admin call fails.
+- A suspended user cannot sign in or refresh; reactivation restores both.
+- A token issued before `changed_at` (floored to the second) is rejected with
+  `401 TOKEN_AUTHORIZATION_STALE`; the silent renew gets the new roles.
 - User service approval cannot grant arbitrary roles.
 - Suspension and role reduction meet the measured five-second denial objective;
-  stale/unavailable required-version state fails closed on protected operations.
-- A policy-only permission change advances every affected user's version and
-  converges consumers; a permission reduction exercises session/denial paths.
-- Concurrent expiry workers expire a grant once, write one effective version,
-  preserve audit, and exclude it from membership at the exact deadline.
-- A break-glass token is rejected at `authz_not_after`, including while
-  Keycloak reconciliation is delayed.
+  stale/unavailable state fails closed on protected operations.
+- A user's first token works on every route, with no onboarding exemption.
 
 ## 8. Phase 3 — enforce authorization at every boundary
 
@@ -287,7 +276,7 @@ fresh schema and the migration path supported by the repository.
   gateway/OpenAPI entry and the service catalog atomically.
 - Keep relationship and resource-state checks in the owning application
   service.
-- Derive actor from `uid`/`sub`; never authorize a path/body identity.
+- Derive actor from `sub`; never authorize a path/body identity.
 - Use `404` concealment only where the matrix explicitly requires it.
 - Add service-layer tests so a controller refactor cannot bypass ownership.
 
@@ -499,14 +488,13 @@ limit. It only delays contractual quota denial.
 1. Remove legacy realm-role fallback and rollout flags.
 2. Remove `isInSubscription`, single-role APIs and old event handlers.
 3. Prove all internal routes are absent from gateway routing.
-4. Run Keycloak drift reconciliation and resolve differences.
-5. Run entitlement replay/reconciliation and resolve version gaps.
-6. Verify bounded retry, publisher confirms, returns and every DLQ.
-7. Set retention/cleanup jobs for webhook inbox, auth audit, outbox/inbox,
+4. Run entitlement replay/reconciliation and resolve version gaps.
+5. Verify bounded retry, publisher confirms, returns and every DLQ.
+6. Set retention/cleanup jobs for webhook inbox, auth audit, outbox/inbox,
    quota ledger and expired reservations.
-8. Exercise break-glass access and post-use review.
-9. Perform production-like load/concurrency/security tests.
-10. Update the service catalog, interaction map, runbooks and release review
+7. Exercise break-glass access and post-use review.
+8. Perform production-like load/concurrency/security tests.
+9. Update the service catalog, interaction map, runbooks and release review
     with implemented rather than proposed behavior.
 
 ## 13. Exact verification commands
@@ -600,11 +588,8 @@ tests, mocks and fakes, and report the integration scenarios as unrun backlog.
 - issuer/audience/expiry/clock-skew validation;
 - multi-role permission composition;
 - malformed token claims fail closed;
-- auth-to-Keycloak retry and drift convergence;
-- session revocation and measured required-version/status denial within the
-  five-second objective;
-- time-bound role expiry, `authz_not_after` and concurrent expiry workers;
-- policy-only bundle change with per-user version fan-out;
+- auth-to-Keycloak admin calls failing as a whole;
+- measured status/`changedAt` token denial within the five-second objective;
 - all matrix decisions, including self/own/any;
 - internal client credentials for every caller;
 - WebSocket origin, CONNECT, SUBSCRIBE, SEND and expiry.

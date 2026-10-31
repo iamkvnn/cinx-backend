@@ -43,10 +43,11 @@ Tài liệu nền:
 
 ## Quyết định đã chốt cho target design
 
-1. `auth` DB là single writer/source of truth cho account status và
-   user-to-role assignments.
-2. Keycloak sở hữu credential, login, sessions và token issuance; assignments
-   trong Keycloak là projection được `auth` reconcile.
+1. Keycloak sở hữu realm roles (`LEARNER` từ default roles), credential, login,
+   sessions và token issuance; user id là `sub`. `auth` DB chỉ giữ account
+   status, ban và `changed_at`.
+2. `auth` là lớp admin mỏng: đổi role/enabled trong Keycloak đồng bộ qua admin
+   API, rồi ghi audit và outbox event trong cùng DB transaction.
 3. Role/permission/composite definitions nằm trong canonical
    `contracts/security/cinx-authorization.yaml`; Keycloak realm config được
    generate hoặc semantic-validate từ catalog này. OAuth client, flow và token

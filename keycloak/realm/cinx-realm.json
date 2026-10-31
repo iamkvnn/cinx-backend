@@ -84,7 +84,7 @@
         "subComponents": {},
         "config": {
           "kc.user.profile.config": [
-            "{\"attributes\":[{\"name\":\"username\",\"displayName\":\"${username}\",\"validations\":{\"length\":{\"min\":3,\"max\":255},\"username-prohibited-characters\":{},\"up-username-not-idn-homograph\":{}},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]},\"multivalued\":false},{\"name\":\"email\",\"displayName\":\"${email}\",\"validations\":{\"email\":{},\"length\":{\"max\":255}},\"required\":{\"roles\":[\"user\"]},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]},\"multivalued\":false},{\"name\":\"firstName\",\"displayName\":\"${firstName}\",\"validations\":{\"length\":{\"max\":255},\"person-name-prohibited-characters\":{}},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]},\"multivalued\":false},{\"name\":\"lastName\",\"displayName\":\"${lastName}\",\"validations\":{\"length\":{\"max\":255},\"person-name-prohibited-characters\":{}},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]},\"multivalued\":false},{\"name\":\"uid\",\"displayName\":\"CINX user ID\",\"multivalued\":false,\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\"]},\"validations\":{\"length\":{\"min\":1,\"max\":255}}}],\"unmanagedAttributePolicy\":\"ADMIN_EDIT\"}"
+            "{\"attributes\":[{\"name\":\"username\",\"displayName\":\"${username}\",\"validations\":{\"length\":{\"min\":3,\"max\":255},\"username-prohibited-characters\":{},\"up-username-not-idn-homograph\":{}},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]},\"multivalued\":false},{\"name\":\"email\",\"displayName\":\"${email}\",\"validations\":{\"email\":{},\"length\":{\"max\":255}},\"required\":{\"roles\":[\"user\"]},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]},\"multivalued\":false},{\"name\":\"firstName\",\"displayName\":\"${firstName}\",\"validations\":{\"length\":{\"max\":255},\"person-name-prohibited-characters\":{}},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]},\"multivalued\":false},{\"name\":\"lastName\",\"displayName\":\"${lastName}\",\"validations\":{\"length\":{\"max\":255},\"person-name-prohibited-characters\":{}},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]},\"multivalued\":false}],\"unmanagedAttributePolicy\":\"ADMIN_EDIT\"}"
           ]
         }
       }
@@ -183,20 +183,6 @@
       },
       "protocolMappers": [
         {
-          "name": "cinx-user-id",
-          "protocol": "openid-connect",
-          "protocolMapper": "oidc-usermodel-attribute-mapper",
-          "consentRequired": false,
-          "config": {
-            "claim.name": "uid",
-            "user.attribute": "uid",
-            "jsonType.label": "String",
-            "id.token.claim": "true",
-            "access.token.claim": "true",
-            "userinfo.token.claim": "true"
-          }
-        },
-        {
           "name": "cinx-realm-roles",
           "protocol": "openid-connect",
           "protocolMapper": "oidc-usermodel-realm-role-mapper",
@@ -248,45 +234,6 @@
           }
         },
         {
-          "name": "cinx-authorization-version",
-          "protocol": "openid-connect",
-          "protocolMapper": "oidc-usermodel-attribute-mapper",
-          "consentRequired": false,
-          "config": {
-            "claim.name": "authz_ver",
-            "user.attribute": "authorization_version",
-            "jsonType.label": "long",
-            "id.token.claim": "false",
-            "access.token.claim": "true"
-          }
-        },
-        {
-          "name": "cinx-authorization-policy-version",
-          "protocol": "openid-connect",
-          "protocolMapper": "oidc-usermodel-attribute-mapper",
-          "consentRequired": false,
-          "config": {
-            "claim.name": "authz_policy_ver",
-            "user.attribute": "authorization_policy_version",
-            "jsonType.label": "long",
-            "id.token.claim": "false",
-            "access.token.claim": "true"
-          }
-        },
-        {
-          "name": "cinx-authorization-not-after",
-          "protocol": "openid-connect",
-          "protocolMapper": "oidc-usermodel-attribute-mapper",
-          "consentRequired": false,
-          "config": {
-            "claim.name": "authz_not_after",
-            "user.attribute": "authz_not_after",
-            "jsonType.label": "long",
-            "id.token.claim": "false",
-            "access.token.claim": "true"
-          }
-        },
-        {
           "name": "cinx-assistant-audience",
           "protocol": "openid-connect",
           "protocolMapper": "oidc-audience-mapper",
@@ -312,14 +259,10 @@
       },
       "authenticationFlowBindingOverrides": { "browser": "5f0c2b1e-8a4d-4c7e-9b2a-3d6e1f7a9c01" },
       "protocolMappers": [
-        { "name": "cinx-user-id", "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-attribute-mapper", "consentRequired": false, "config": { "claim.name": "uid", "user.attribute": "uid", "jsonType.label": "String", "id.token.claim": "true", "access.token.claim": "true", "userinfo.token.claim": "true" } },
         { "name": "cinx-realm-roles", "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-realm-role-mapper", "consentRequired": false, "config": { "claim.name": "roles", "jsonType.label": "String", "multivalued": "true", "id.token.claim": "true", "access.token.claim": "true" } },
         { "name": "cinx-api-audience", "protocol": "openid-connect", "protocolMapper": "oidc-audience-mapper", "consentRequired": false, "config": { "included.custom.audience": "cinx-api", "id.token.claim": "false", "access.token.claim": "true" } },
         { "name": "cinx-permissions", "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-client-role-mapper", "consentRequired": false, "config": { "usermodel.clientRoleMapping.clientId": "cinx-api", "claim.name": "permissions", "jsonType.label": "String", "multivalued": "true", "id.token.claim": "false", "access.token.claim": "true" } },
         { "name": "cinx-token-kind", "protocol": "openid-connect", "protocolMapper": "oidc-hardcoded-claim-mapper", "consentRequired": false, "config": { "claim.name": "token_kind", "claim.value": "user", "jsonType.label": "String", "id.token.claim": "false", "access.token.claim": "true" } },
-        { "name": "cinx-authorization-version", "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-attribute-mapper", "consentRequired": false, "config": { "claim.name": "authz_ver", "user.attribute": "authorization_version", "jsonType.label": "long", "id.token.claim": "false", "access.token.claim": "true" } },
-        { "name": "cinx-authorization-policy-version", "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-attribute-mapper", "consentRequired": false, "config": { "claim.name": "authz_policy_ver", "user.attribute": "authorization_policy_version", "jsonType.label": "long", "id.token.claim": "false", "access.token.claim": "true" } },
-        { "name": "cinx-authorization-not-after", "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-attribute-mapper", "consentRequired": false, "config": { "claim.name": "authz_not_after", "user.attribute": "authz_not_after", "jsonType.label": "long", "id.token.claim": "false", "access.token.claim": "true" } },
         { "name": "cinx-assistant-audience", "protocol": "openid-connect", "protocolMapper": "oidc-audience-mapper", "consentRequired": false, "config": { "included.custom.audience": "cinx-assistant", "id.token.claim": "false", "access.token.claim": "true" } },
         { "name": "cinx-amr", "protocol": "openid-connect", "protocolMapper": "oidc-amr-mapper", "consentRequired": false, "config": { "access.token.claim": "true", "id.token.claim": "true", "introspection.token.claim": "true" } }
       ]
@@ -335,14 +278,10 @@
       "secret": "${CINX_ASSISTANT_CLIENT_SECRET}",
       "attributes": { "standard.token.exchange.enabled": "true" },
       "protocolMappers": [
-        {"name":"cinx-user-id","protocol":"openid-connect","protocolMapper":"oidc-usermodel-attribute-mapper","consentRequired":false,"config":{"claim.name":"uid","user.attribute":"uid","jsonType.label":"String","id.token.claim":"false","access.token.claim":"true"}},
         {"name":"cinx-realm-roles","protocol":"openid-connect","protocolMapper":"oidc-usermodel-realm-role-mapper","consentRequired":false,"config":{"claim.name":"roles","jsonType.label":"String","multivalued":"true","id.token.claim":"false","access.token.claim":"true"}},
         {"name":"cinx-api-audience","protocol":"openid-connect","protocolMapper":"oidc-audience-mapper","consentRequired":false,"config":{"included.custom.audience":"cinx-api","id.token.claim":"false","access.token.claim":"true"}},
         {"name":"cinx-permissions","protocol":"openid-connect","protocolMapper":"oidc-usermodel-client-role-mapper","consentRequired":false,"config":{"usermodel.clientRoleMapping.clientId":"cinx-api","claim.name":"permissions","jsonType.label":"String","multivalued":"true","id.token.claim":"false","access.token.claim":"true"}},
-        {"name":"cinx-token-kind","protocol":"openid-connect","protocolMapper":"oidc-hardcoded-claim-mapper","consentRequired":false,"config":{"claim.name":"token_kind","claim.value":"user","jsonType.label":"String","id.token.claim":"false","access.token.claim":"true"}},
-        {"name":"cinx-authorization-version","protocol":"openid-connect","protocolMapper":"oidc-usermodel-attribute-mapper","consentRequired":false,"config":{"claim.name":"authz_ver","user.attribute":"authorization_version","jsonType.label":"long","id.token.claim":"false","access.token.claim":"true"}},
-        {"name":"cinx-authorization-policy-version","protocol":"openid-connect","protocolMapper":"oidc-usermodel-attribute-mapper","consentRequired":false,"config":{"claim.name":"authz_policy_ver","user.attribute":"authorization_policy_version","jsonType.label":"long","id.token.claim":"false","access.token.claim":"true"}},
-        {"name":"cinx-authorization-not-after","protocol":"openid-connect","protocolMapper":"oidc-usermodel-attribute-mapper","consentRequired":false,"config":{"claim.name":"authz_not_after","user.attribute":"authz_not_after","jsonType.label":"long","id.token.claim":"false","access.token.claim":"true"}}
+        {"name":"cinx-token-kind","protocol":"openid-connect","protocolMapper":"oidc-hardcoded-claim-mapper","consentRequired":false,"config":{"claim.name":"token_kind","claim.value":"user","jsonType.label":"String","id.token.claim":"false","access.token.claim":"true"}}
       ]
     },
     {
