@@ -15,4 +15,7 @@ public class UserStreakView {
     private Integer currentStreak;
     private Integer highestStreak;
     private LocalDate lastActivityDate;
+    private Integer celebratedMilestone;
+    /** The count of a streak just broken and not yet shown as lost; null otherwise. */
+    private Integer lostStreak;
 }
