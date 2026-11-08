@@ -1,0 +1,281 @@
+schemaVersion: "1.0"
+status: illustrative-only
+activation: disabled-until-product-and-provider-approval
+notes:
+  - This file demonstrates an admin/import payload; it is not runtime authority.
+  - Published catalog state lives in commerce and is changed through audited APIs.
+  - A subscription never grants or revokes an authorization role or permission.
+  - Price and offer keys below are import keys; the SPA receives only a server-generated opaque offer ID.
+
+market:
+  code: VN
+  country: VN
+  presentmentCurrency: VND
+  currencyExponent: 0
+  preferredProvider: STRIPE
+  merchantAccountCountry: REQUIRED_DECISION
+  taxBehavior: REQUIRED_LEGAL_AND_TAX_REVIEW
+
+subscriptionModel:
+  enabledSubjectTypes: [USER]
+  baseSlot: BASE
+  maximumCurrentSubscriptionsPerSubjectAndSlot: 1
+  futureSubjectTypes: [ORGANIZATION]
+  futureSlots: [ADD_ON]
+
+billingPolicies:
+  - code: STANDARD_NO_TRIAL
+    version: 1
+    trial:
+      enabled: false
+    renewalFailure:
+      policy: ENTER_GRACE
+      graceHours: 72
+      accessDuringGrace: true
+      quotaDuringGrace: DENY_METERED
+    upgrade:
+      effectiveWhen: PROVIDER_PAYMENT_CONFIRMED
+      proration: ALWAYS_INVOICE
+      pendingUpdateRequired: true
+    downgrade:
+      effectiveWhen: CURRENT_PERIOD_END
+      proration: NONE
+    cancellation:
+      effectiveWhen: CURRENT_PERIOD_END
+    eligibilityLoss:
+      accessEffectiveWhen: IMMEDIATE
+      providerAction: CANCEL_AT_PERIOD_END
+      refund: MANUAL_REVIEW
+    quota:
+      rollover: false
+      overage: false
+
+  - code: OPTIONAL_CARD_TRIAL_7D
+    version: 1
+    enabledForSale: false
+    trial:
+      enabled: true
+      durationDays: 7
+      paymentMethodRequired: true
+      maximumRedemptionsPerSubjectAndProductLine: 1
+      redemptionScope: SUBJECT_PRODUCT_LINE
+    renewalFailure:
+      policy: ENTER_GRACE
+      graceHours: 72
+      accessDuringGrace: true
+      quotaDuringGrace: DENY_METERED
+    upgrade:
+      effectiveWhen: PROVIDER_PAYMENT_CONFIRMED
+      proration: ALWAYS_INVOICE
+      pendingUpdateRequired: true
+    downgrade:
+      effectiveWhen: CURRENT_PERIOD_END
+      proration: NONE
+    cancellation:
+      effectiveWhen: CURRENT_PERIOD_END
+    eligibilityLoss:
+      accessEffectiveWhen: IMMEDIATE
+      providerAction: CANCEL_AT_PERIOD_END
+      refund: MANUAL_REVIEW
+    quota:
+      rollover: false
+      overage: false
+
+productLines:
+  - code: LEARNING
+    customerSegment: LEARNER
+    eligibilityPolicyKey: ACTIVE_LEARNER
+    subscriptionSlot: BASE
+  - code: CREATOR
+    customerSegment: INSTRUCTOR
+    eligibilityPolicyKey: VERIFIED_INSTRUCTOR
+    subscriptionSlot: BASE
+
+systemBindings:
+  - key: DEFAULT_USER_BASE
+    subjectType: USER
+    subscriptionSlot: BASE
+    market: VN
+    targetPlan: { code: LEARNER_FREE, version: 1 }
+  - key: CREATOR_ELIGIBILITY_LOSS_BASE
+    subjectType: USER
+    sourceProductLine: CREATOR
+    subscriptionSlot: BASE
+    market: VN
+    targetPlan: { code: LEARNER_FREE, version: 1 }
+
+plans:
+  - code: LEARNER_FREE
+    productLine: LEARNING
+    version: 1
+    defaultLocale: vi-VN
+    translations:
+      vi-VN:
+        name: Học viên Miễn phí
+        description: Truy cập nền tảng cơ bản và hạn mức AI dùng thử hằng tháng.
+    billingPolicyRef: { code: STANDARD_NO_TRIAL, version: 1 }
+    prices: []
+    offers:
+      - { key: VN_FREE, market: VN, price: null, status: ACTIVE }
+    entitlements:
+      learning.subscription-catalog.access: false
+      learning.subscription-catalog.extended: false
+      learning.offline-download: false
+      recommendation.agent.advanced: false
+      # credits since commerce V12 (1 credit = 1,000 weighted tokens); the free grant itself lives in R__subscription_bootstrap.sql
+      recommendation.agent.requests:
+        limit: 350
+        unit: CREDIT
+        resetPolicy: CALENDAR_MONTH
+
+  - code: LEARNER_PLUS
+    productLine: LEARNING
+    version: 1
+    defaultLocale: vi-VN
+    translations:
+      vi-VN:
+        name: Học viên Plus
+        description: Catalog subscription tiêu chuẩn và trợ lý AI nâng cao.
+    billingPolicyRef: { code: STANDARD_NO_TRIAL, version: 1 }
+    prices:
+      - { key: VN_MONTHLY, market: VN, currency: VND, interval: MONTH, intervalCount: 1, amount: 99000 }
+      - { key: VN_YEARLY, market: VN, currency: VND, interval: YEAR, intervalCount: 1, amount: 990000 }
+    offers:
+      - { key: VN_MONTHLY, market: VN, price: VN_MONTHLY, status: ACTIVE }
+      - { key: VN_YEARLY, market: VN, price: VN_YEARLY, status: ACTIVE }
+    entitlements:
+      learning.subscription-catalog.access: true
+      learning.subscription-catalog.extended: false
+      learning.offline-download: false
+      recommendation.agent.advanced: true
+      recommendation.agent.requests:
+        limit: 2000
+        unit: CREDIT
+        resetPolicy: CALENDAR_MONTH
+
+  - code: LEARNER_MAX
+    productLine: LEARNING
+    version: 1
+    defaultLocale: vi-VN
+    translations:
+      vi-VN:
+        name: Học viên Max
+        description: Catalog mở rộng, offline và hạn mức AI cao hơn.
+    billingPolicyRef: { code: STANDARD_NO_TRIAL, version: 1 }
+    prices:
+      - { key: VN_MONTHLY, market: VN, currency: VND, interval: MONTH, intervalCount: 1, amount: 199000 }
+      - { key: VN_YEARLY, market: VN, currency: VND, interval: YEAR, intervalCount: 1, amount: 1990000 }
+    offers:
+      - { key: VN_MONTHLY, market: VN, price: VN_MONTHLY, status: ACTIVE }
+      - { key: VN_YEARLY, market: VN, price: VN_YEARLY, status: ACTIVE }
+    entitlements:
+      learning.subscription-catalog.access: true
+      learning.subscription-catalog.extended: true
+      learning.offline-download: true
+      recommendation.agent.advanced: true
+      recommendation.agent.requests:
+        limit: 6000
+        unit: CREDIT
+        resetPolicy: CALENDAR_MONTH
+
+  - code: INSTRUCTOR_FREE
+    productLine: CREATOR
+    version: 1
+    defaultLocale: vi-VN
+    translations:
+      vi-VN:
+        name: Giảng viên Cơ bản
+        description: Công cụ giảng viên cơ bản với hạn mức AI nhỏ hằng tháng.
+    billingPolicyRef: { code: STANDARD_NO_TRIAL, version: 1 }
+    prices: []
+    offers:
+      - { key: VN_FREE, market: VN, price: null, status: ACTIVE }
+    entitlements:
+      learning.subscription-catalog.access: false
+      learning.subscription-catalog.extended: false
+      learning.offline-download: false
+      recommendation.agent.advanced: false
+      recommendation.agent.requests:
+        limit: 350
+        unit: CREDIT
+        resetPolicy: CALENDAR_MONTH
+      learning.instructor.analytics.advanced: false
+      learning.instructor.bulk-tools: false
+      learning.instructor.subtitle.minutes:
+        limit: 30
+        unit: MINUTE
+        resetPolicy: CALENDAR_MONTH
+      recommendation.instructor.authoring.requests:
+        limit: 20
+        unit: REQUEST
+        resetPolicy: CALENDAR_MONTH
+
+  - code: INSTRUCTOR_PRO
+    productLine: CREATOR
+    version: 1
+    defaultLocale: vi-VN
+    translations:
+      vi-VN:
+        name: Giảng viên Pro
+        description: Analytics, bulk tools, phụ đề AI và trợ lý soạn bài nâng cao.
+    billingPolicyRef: { code: STANDARD_NO_TRIAL, version: 1 }
+    prices:
+      - { key: VN_MONTHLY, market: VN, currency: VND, interval: MONTH, intervalCount: 1, amount: 299000 }
+      - { key: VN_YEARLY, market: VN, currency: VND, interval: YEAR, intervalCount: 1, amount: 2990000 }
+    offers:
+      - { key: VN_MONTHLY, market: VN, price: VN_MONTHLY, status: ACTIVE }
+      - { key: VN_YEARLY, market: VN, price: VN_YEARLY, status: ACTIVE }
+    entitlements:
+      learning.subscription-catalog.access: true
+      learning.subscription-catalog.extended: false
+      learning.offline-download: false
+      recommendation.agent.advanced: true
+      recommendation.agent.requests:
+        limit: 2000
+        unit: CREDIT
+        resetPolicy: CALENDAR_MONTH
+      learning.instructor.analytics.advanced: true
+      learning.instructor.bulk-tools: true
+      learning.instructor.subtitle.minutes:
+        limit: 300
+        unit: MINUTE
+        resetPolicy: CALENDAR_MONTH
+      recommendation.instructor.authoring.requests:
+        limit: 500
+        unit: REQUEST
+        resetPolicy: CALENDAR_MONTH
+
+  - code: INSTRUCTOR_STUDIO
+    productLine: CREATOR
+    version: 1
+    defaultLocale: vi-VN
+    translations:
+      vi-VN:
+        name: Giảng viên Studio
+        description: Bộ công cụ creator đầy đủ với catalog và hạn mức AI lớn.
+    billingPolicyRef: { code: STANDARD_NO_TRIAL, version: 1 }
+    prices:
+      - { key: VN_MONTHLY, market: VN, currency: VND, interval: MONTH, intervalCount: 1, amount: 599000 }
+      - { key: VN_YEARLY, market: VN, currency: VND, interval: YEAR, intervalCount: 1, amount: 5990000 }
+    offers:
+      - { key: VN_MONTHLY, market: VN, price: VN_MONTHLY, status: ACTIVE }
+      - { key: VN_YEARLY, market: VN, price: VN_YEARLY, status: ACTIVE }
+    entitlements:
+      learning.subscription-catalog.access: true
+      learning.subscription-catalog.extended: true
+      learning.offline-download: true
+      recommendation.agent.advanced: true
+      recommendation.agent.requests:
+        limit: 6000
+        unit: CREDIT
+        resetPolicy: CALENDAR_MONTH
+      learning.instructor.analytics.advanced: true
+      learning.instructor.bulk-tools: true
+      learning.instructor.subtitle.minutes:
+        limit: 1500
+        unit: MINUTE
+        resetPolicy: CALENDAR_MONTH
+      recommendation.instructor.authoring.requests:
+        limit: 2000
+        unit: REQUEST
+        resetPolicy: CALENDAR_MONTH
