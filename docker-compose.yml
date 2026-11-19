@@ -33,7 +33,8 @@ services:
     - ./env/dev/rabbitmq.env
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
-  # the gateway's search rate-limit counters only; they live a minute, so nothing is persisted
+  # short-lived keys only: the gateway's search rate-limit counters (a minute) and auth's authorization-change
+  # keys (six minutes, AuthorizationChangeKey); losing them delays a revocation until tokens expire, so nothing is persisted
   redis:
     image: redis:7-alpine
     container_name: redis
@@ -112,6 +113,9 @@ services:
         condition: service_healthy
       eureka-server:
         condition: service_started
+      # not awaited healthy: a change is stored without Redis, only its early revocation is lost
+      redis:
+        condition: service_started
     env_file:
     - ./env/dev/common.env
     - ./env/dev/auth.env
@@ -151,6 +155,24 @@ services:
       context: .
       dockerfile: learning/Dockerfile
     image: cinx-learning:local
+  notification:
+    container_name: notification-service
+    networks:
+    - cinx-network
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      eureka-server:
+        condition: service_started
+    env_file:
+    - ./env/dev/common.env
+    - ./env/dev/notification.env
+    volumes:
+      - ${FIREBASE_CREDENTIALS_FILE:-./cinx-d9301-72bfc680e59c.json}:/run/secrets/firebase-credentials.json:ro
+    build: ./notification
+    image: cinx-notification:local
   user:
     container_name: user-service
     networks:
