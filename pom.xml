@@ -25,6 +25,7 @@
         <module>user</module>
         <module>commerce</module>
         <module>learning</module>
+        <module>notification</module>
     </modules>
 
     <properties>
