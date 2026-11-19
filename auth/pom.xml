@@ -39,6 +39,11 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-webflux</artifactId>
 		</dependency>
+		<!-- the authorization-change keys the gateway reads (AuthorizationChangeKey) -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-data-redis</artifactId>
+		</dependency>
 		<!-- AWS SDK v2 -->
 		<dependency>
 			<groupId>software.amazon.awssdk</groupId>

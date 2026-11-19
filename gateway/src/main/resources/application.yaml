@@ -64,7 +64,7 @@ spring:
           - id: user-profile-v2
             uri: lb://user
             predicates:
-            - Path=/api/v1/profiles/**,/api/v1/admin/profiles/**,/api/v1/policies/**,/api/v1/instructor-applications/**,/api/v1/instructor-partnerships/**
+            - Path=/api/v1/profiles/**,/api/v1/admin/profiles/**,/api/v1/policies/**,/api/v1/instructor-applications/**,/api/v1/instructor-partnerships/**,/api/v1/users/**
           - id: keycloak
             uri: ${keycloak.base-url}
             predicates:
@@ -72,7 +72,7 @@ spring:
           - id: learning-service
             uri: lb://learning
             predicates:
-            - Path=/api/v1/courses/**,/api/v1/instructors/**,/api/v1/admin/courses/**,/api/v1/enrollments/**,/api/v1/learning/**,/api/v1/assessments/**,/api/v1/community/**,/api/v1/certificates/**
+            - Path=/api/v1/courses/**,/api/v1/instructors/**,/api/v1/admin/courses/**,/api/v1/admin/lab-reviews/**,/api/v1/enrollments/**,/api/v1/learning/**,/api/v1/assessments/**,/api/v1/community/**,/api/v1/certificates/**
           - id: notification-service
             uri: lb://notification
             predicates:
@@ -93,6 +93,28 @@ spring:
             uri: ${assistant.base-url}
             predicates:
             - Path=/api/v1/assistant/**
+          - id: campus-service
+            uri: ${campus.base-url}
+            predicates:
+            - Path=/api/v1/campus/**
+            # Colyseus answers CORS itself; keep one copy so browsers accept the response
+            filters:
+            - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials Access-Control-Allow-Methods Access-Control-Allow-Headers, RETAIN_FIRST
+          # Colyseus matchmaking (HTTP) and room sockets (WebSocket upgrade) under one prefix; campus authenticates the seat request itself
+          - id: campus-realtime
+            uri: ${campus.base-url}
+            predicates:
+            - Path=/campus/**
+            filters:
+            - RewritePath=/campus/?(?<segment>.*), /$\{segment}
+            - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials Access-Control-Allow-Methods Access-Control-Allow-Headers, RETAIN_FIRST
+          # a learner's machine: the terminal and file socket of an ENVIRONMENT lab, served by the runner at the same path; the ticket in the URL is the auth
+          - id: lab-sessions
+            uri: ${runner.base-url}
+            predicates:
+            - Path=/lab-sessions/**
+            filters:
+            - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials Access-Control-Allow-Methods Access-Control-Allow-Headers, RETAIN_FIRST
           - id: reporting-service
             uri: lb://reporting
             predicates:
@@ -112,13 +134,24 @@ recommendation:
   base-url: http://${RECOMMENDATION_HOST}:${RECOMMENDATION_PORT}
 assistant:
   base-url: http://${ASSISTANT_HOST:assistant}:${ASSISTANT_PORT:8092}
+campus:
+  base-url: http://${CAMPUS_HOST:campus}:${CAMPUS_PORT:2567}
+runner:
+  base-url: http://${RUNNER_HOST:runner}:${RUNNER_PORT:8094}
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS}
 server:
   port: 9090
 management:
+  # metrics stay off the public port: 9090 is published, the management port is not
+  server:
+    port: ${GATEWAY_MANAGEMENT_PORT:9190}
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
   health:
-    # the search limit fails open without Redis, so Redis being down must not mark the gateway down
+    # the search limit and the token-freshness check both fail open without Redis, so it must not mark the gateway down
     redis:
       enabled: false
 cinx:
@@ -128,12 +161,6 @@ cinx:
     search:
       guest-per-minute: 30
       user-per-minute: 120
-  security:
-    authorization-freshness:
-      auth-base-url: ${AUTH_INTERNAL_BASE_URL:http://auth:8888}
-      token-uri: ${KEYCLOAK_SERVICE_TOKEN_URI:http://keycloak:8080/realms/cinx/protocol/openid-connect/token}
-      client-id: ${SERVICE_CLIENT_ID:cinx-gateway-service}
-      client-secret: ${CINX_GATEWAY_SERVICE_CLIENT_SECRET:}
 springdoc:
   api-docs:
     path: /v3/api-docs

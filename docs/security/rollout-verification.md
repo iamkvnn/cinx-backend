@@ -232,10 +232,10 @@ and service token.
    the application workflow; verification/termination events make auth add or
    remove `INSTRUCTOR` in Keycloak.
 6. Set the Keycloak user `enabled` flag on suspend/ban and reactivate.
-7. Serve `GET /internal/identity/accounts/{userId}/authorization-state`
-   (`status`, `changedAt`) and deploy the freshness check (iat against
-   `changedAt`, cache of at most five seconds) in the gateway, `common` and the
-   Python services.
+7. After each committed change, write `authz:changed:{userId}` to Redis
+   (`status`, `changedAt`, 360 s TTL) and check freshness (iat against
+   `changedAt`) at the gateway only, letting requests through while Redis is
+   down.
 8. Publish `auth.authorization.changed` version 3 with roles, permissions and
    `changedAt`; consumers order by `changedAt`.
 
@@ -556,10 +556,12 @@ the project. A missing dependency is not a passing test.
 
 ### Compose
 
-Using an existing ignored local environment file:
+Using the existing ignored `env/dev/*.env` files, which the services' `env_file`
+entries read. The compose file interpolates only variables that have defaults, so
+no `--env-file` is needed (the README notes the old `env/compose.env` is unused).
 
 ```powershell
-docker compose --env-file env/compose.env config --quiet
+docker compose config --quiet
 ```
 
 Do not read or print secrets during verification.

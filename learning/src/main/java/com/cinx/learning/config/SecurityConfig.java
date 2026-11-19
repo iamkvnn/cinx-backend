@@ -2,13 +2,10 @@ package com.cinx.learning.config;
 
 import com.cinx.common.security.CinxJwtAuthenticationConverter;
 import com.cinx.common.security.KeycloakJwtDecoderFactory;
-import com.cinx.common.security.AuthorizationFreshnessConfiguration;
-import com.cinx.common.security.AuthorizationFreshnessFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Import;
 import org.springframework.core.annotation.Order;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -17,7 +14,6 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.http.HttpMethod;
 
 import java.util.Set;
@@ -26,7 +22,6 @@ import java.util.Set;
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
-@Import(AuthorizationFreshnessConfiguration.class)
 public class SecurityConfig {
     @Value("${security.keycloak.issuer-uri:http://localhost:8180/realms/cinx}")
     private String keycloakIssuer;
@@ -45,7 +40,8 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/internal/courses/**", "/internal/lessons/**",
-                                "/internal/enrollments/**", "/internal/community/**").authenticated()
+                                "/internal/enrollments/**", "/internal/community/**", "/internal/instructors/**",
+                                "/internal/qna/**", "/internal/assessments/**", "/internal/labs/**").authenticated()
                         .anyRequest().denyAll())
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .jwt(jwt -> jwt.decoder(internalJwtDecoder())
@@ -59,7 +55,7 @@ public class SecurityConfig {
 
     @Bean
     @Order(2)
-    public SecurityFilterChain securityFilterChain(HttpSecurity http, AuthorizationFreshnessFilter freshnessFilter) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http.csrf(AbstractHttpConfigurer::disable)
              .authorizeHttpRequests(
                 auth -> auth
@@ -90,8 +86,7 @@ public class SecurityConfig {
                 .accessDeniedHandler(jwtAccessDeniedHandler)
             )
             .sessionManagement(session -> session
-                .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-            .addFilterAfter(freshnessFilter, BearerTokenAuthenticationFilter.class);
+                .sessionCreationPolicy(SessionCreationPolicy.STATELESS));
 
         return http.build();
     }
@@ -110,6 +105,7 @@ public class SecurityConfig {
         return KeycloakJwtDecoderFactory.create(keycloakIssuer, keycloakJwkSetUri,
                 "cinx-learning-internal", "service",
                 Set.of("cinx-commerce-service", "cinx-notification-service",
-                        "cinx-recommendation-service", "cinx-reporting-service", "cinx-assistant-service"));
+                        "cinx-recommendation-service", "cinx-reporting-service", "cinx-assistant-service",
+                        "cinx-campus-service", "cinx-runner-service"));
     }
 }

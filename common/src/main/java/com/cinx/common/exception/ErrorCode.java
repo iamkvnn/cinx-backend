@@ -49,6 +49,7 @@ public enum ErrorCode {
     COURSE_NOT_IN_REVIEW("Course is not waiting for approval"),
     COURSE_NOT_DELETABLE("Course cannot be deleted"),
     COURSE_NOT_READY("Course is not ready for review"),
+    CATEGORY_IN_USE("Category is still used by courses"),
     EDIT_CONFLICT("The resource was changed by someone else"),
 
     ORDER_ITEMS_REQUIRED("Order items required"),
@@ -76,6 +77,15 @@ public enum ErrorCode {
     LEARNING_PATH_ALREADY_ACTIVE("Learning path already active"),
 
     QUIZ_REVIEW_NOT_ALLOWED("Quiz review not allowed"),
+    LAB_CHECK_NOT_PASSED("The lab check has not passed on this content"),
+    LAB_ATTEMPT_IN_FLIGHT("A run of this lab is still in progress"),
+    LAB_RATE_LIMITED("Too many lab runs in the last minute"),
+    LAB_SUBMISSIONS_USED_UP("No submissions left for this lab"),
+    LAB_SESSION_GONE("The lab machine is not running"),
+    LAB_SETUP_NEEDS_ROOT("A setup script needs the ROOT machine profile"),
+    LAB_REVIEW_NOT_PENDING("The lab release is not waiting for review"),
+    LAB_TUTOR_DISABLED("CozX is turned off for this lab"),
+    LAB_PACKAGE_KIND("The lab package is of another kind than the lab"),
     QUIZ_SESSION_ALREADY_IN_PROGRESS("Quiz session already in progress"),
     QUIZ_ATTEMPT_LIMIT_REACHED("Quiz attempt limit reached"),
     QUIZ_SESSION_NOT_IN_PROGRESS("Quiz session not in progress"),

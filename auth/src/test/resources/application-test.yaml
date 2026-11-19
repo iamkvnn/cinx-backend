@@ -18,6 +18,10 @@ spring:
   task:
     scheduling:
       enabled: false
+  data:
+    redis:
+      host: localhost
+      port: 6379
   rabbitmq:
     host: localhost
     port: 5672

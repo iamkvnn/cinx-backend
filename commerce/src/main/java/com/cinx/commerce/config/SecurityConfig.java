@@ -2,9 +2,6 @@ package com.cinx.commerce.config;
 
 import com.cinx.common.security.CinxJwtAuthenticationConverter;
 import com.cinx.common.security.KeycloakJwtDecoderFactory;
-import com.cinx.common.security.AuthorizationFreshnessConfiguration;
-import com.cinx.common.security.AuthorizationFreshnessFilter;
-import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.*;
 import org.springframework.core.annotation.Order;
@@ -20,7 +17,6 @@ import java.util.Set;
 
 @Configuration
 @EnableMethodSecurity
-@Import(AuthorizationFreshnessConfiguration.class)
 public class SecurityConfig {
     @Bean
     JwtDecoder jwtDecoder(@Value("${security.keycloak.issuer-uri}") String issuer,
@@ -39,7 +35,7 @@ public class SecurityConfig {
                 .oauth2ResourceServer(o -> o.jwt(j -> j.decoder(internalJwtDecoder())
                         .jwtAuthenticationConverter(new CinxJwtAuthenticationConverter(
                                 "cinx-commerce-internal", Set.of("cinx-learning-service", "cinx-recommendation-service",
-                                "cinx-assistant-service")))))
+                                "cinx-assistant-service", "cinx-campus-service")))))
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .build();
     }
@@ -47,7 +43,8 @@ public class SecurityConfig {
     JwtDecoder internalJwtDecoder() {
         return KeycloakJwtDecoderFactory.create(issuerForInternal, jwksForInternal,
                 "cinx-commerce-internal", "service",
-                Set.of("cinx-learning-service", "cinx-recommendation-service", "cinx-assistant-service"));
+                Set.of("cinx-learning-service", "cinx-recommendation-service", "cinx-assistant-service",
+                        "cinx-campus-service"));
     }
 
     @Value("${security.keycloak.issuer-uri:http://localhost:8180/realms/cinx}")
@@ -57,7 +54,7 @@ public class SecurityConfig {
     private String jwksForInternal;
 
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http, JwtDecoder decoder, AuthorizationFreshnessFilter freshnessFilter) throws Exception {
+    SecurityFilterChain securityFilterChain(HttpSecurity http, JwtDecoder decoder) throws Exception {
         return http.csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(a -> a.requestMatchers("/actuator/**", "/api/v1/payments/webhooks/**",
                                 "/api/v1/billing/webhooks/**").permitAll()
@@ -65,7 +62,6 @@ public class SecurityConfig {
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(o -> o.jwt(j -> j.decoder(decoder)
                         .jwtAuthenticationConverter(new CinxJwtAuthenticationConverter())))
-                .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .addFilterAfter(freshnessFilter, BearerTokenAuthenticationFilter.class).build();
+                .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS)).build();
     }
 }
