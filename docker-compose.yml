@@ -189,6 +189,24 @@ services:
     - ./env/dev/user.env
     build: ./user
     image: cinx-user:local
+  reporting:
+    container_name: reporting-service
+    networks:
+      - cinx-network
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      eureka-server:
+        condition: service_started
+    env_file:
+      - ./env/dev/common.env
+      - ./env/dev/reporting.env
+    build:
+      context: .
+      dockerfile: reporting/Dockerfile
+    image: cinx-reporting:local
 networks:
   cinx-network:
     driver: bridge

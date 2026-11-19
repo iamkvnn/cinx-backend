@@ -26,6 +26,7 @@
         <module>commerce</module>
         <module>learning</module>
         <module>notification</module>
+        <module>reporting</module>
     </modules>
 
     <properties>
