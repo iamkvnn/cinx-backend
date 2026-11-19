@@ -1,9 +1,26 @@
 # CINX security and commercial-entitlement documentation
 
-Thư mục này mô tả target architecture để triển khai authentication,
-authorization, plan, subscription, feature entitlement và quota cho CINX.
-Đây là thiết kế đích; code và contracts hiện tại chưa triển khai đầy đủ các
-quy tắc trong tài liệu.
+This folder specifies authentication, authorization, plans, subscriptions,
+feature entitlements and quotas for CINX.
+
+**Implemented:** Keycloak realm roles and their permission composites
+(`keycloak/realm/cinx-realm.json`, `contracts/security/cinx-authorization.yaml`);
+the `CinxJwtAuthenticationConverter` in `common-security`, which turns roles,
+permissions and scopes into `ROLE_*`, `PERM_*` and `SCOPE_*` authorities
+checked with `@PreAuthorize`; separate user and service token chains with
+per-target `cinx-<service>-internal` audiences; the token freshness check
+(gateway `AuthorizationFreshnessWebFilter` only, reading the Redis keys auth
+writes after each change to `identity_account.changed_at`, failing open while
+Redis is down); MFA step-up (`CinxMfaVerifier`, `MFA_STEP_UP_REQUIRED`); and role
+changes through auth with an audit row and the `auth.authorization.changed`
+outbox event.
+
+**Not implemented:** two-person approval for granting `PLATFORM_ADMIN` and
+`BREAK_GLASS_ADMIN` (auth rejects both in `PUT .../roles`, so there is no grant
+path yet); detection or reconciliation of role assignments edited by hand in
+Keycloak (they take effect on the user's next token and are not audited by
+auth); and live Stripe billing (`cinx.subscription.billing-enabled=false`).
+Operations the matrix does not cover yet are named in its `coverage` field.
 
 ## Tài liệu
 
@@ -28,20 +45,20 @@ Tài liệu nền:
 - [AsyncAPI contract](../../contracts/asyncapi/cinx-events.yaml)
 - [Internal OpenAPI contract](../../contracts/openapi/cinx-internal.yaml)
 
-## Mức độ normative
+## Normative level
 
-- Các từ `MUST`, `MUST NOT`, `SHOULD`, `SHOULD NOT` biểu diễn yêu cầu bắt
-  buộc hoặc khuyến nghị mạnh của target design.
-- `authorization-matrix.yaml` là catalog cần được hoàn tất cho mọi operation
-  trước release. Bản hiện tại bao phủ các trust boundary, lỗ hổng critical và
-  flow mới; trường `coverage` công khai phần chưa hoàn tất.
+- `MUST`, `MUST NOT`, `SHOULD` and `SHOULD NOT` mark a requirement or a strong
+  recommendation of the model; where the code has not caught up (see above), the
+  code wins and the gap is listed.
+- `authorization-matrix.yaml` has `status: active`. It must cover every operation
+  before release; its `coverage` field states what is still missing.
 - `final-code-review.md` là snapshot của worktree tại thời điểm review, không
   phải implementation contract.
 - Khi implementation bắt đầu, mọi thay đổi public/internal/event contract
   phải được cập nhật đồng thời trong OpenAPI, AsyncAPI, producer, consumer và
   tests.
 
-## Quyết định đã chốt cho target design
+## Decisions of the model
 
 1. Keycloak sở hữu realm roles (`LEARNER` từ default roles), credential, login,
    sessions và token issuance; user id là `sub`. `auth` DB chỉ giữ account

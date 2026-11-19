@@ -2,10 +2,14 @@ package com.cinx.auth.identity.infrastructure.persistence;
 
 import com.cinx.auth.identity.domain.IdentityAccount;
 import com.cinx.auth.identity.domain.IdentityAccountRepository;
+import com.cinx.auth.identity.domain.IdentityStatus;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 @Component
@@ -24,6 +28,12 @@ class IdentityAccountRepositoryAdapter implements IdentityAccountRepository {
     @Transactional
     public Optional<IdentityAccount> lockById(String userId) {
         return accounts.lockByUserId(userId).map(mapper::toDomain);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<String> findExpiredBans(LocalDateTime now, int limit) {
+        return accounts.findUserIdsWithBanEndedBy(IdentityStatus.BANNED, now, PageRequest.of(0, limit));
     }
 
     @Override

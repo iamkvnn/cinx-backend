@@ -17,9 +17,8 @@ import java.util.regex.Pattern;
 /**
  * Converts final Keycloak JWTs into CINX authorities.
  *
- * <p>Domain code uses the stable {@code uid} claim as the principal whenever it
- * is present. Keycloak realm roles become {@code ROLE_*} authorities and OAuth
- * scopes remain {@code SCOPE_*} authorities.</p>
+ * <p>The principal is the token's {@code sub} claim. Keycloak realm roles become
+ * {@code ROLE_*} authorities and OAuth scopes remain {@code SCOPE_*} authorities.</p>
  */
 public class CinxJwtAuthenticationConverter implements Converter<Jwt, AbstractAuthenticationToken> {
     private static final Set<String> DEFAULT_CINX_ROLES = Set.of(
