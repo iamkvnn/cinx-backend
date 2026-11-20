@@ -2,7 +2,6 @@ package com.cinx.auth.identity.api.mapper;
 
 import com.cinx.auth.identity.api.dto.UpdateRolesRequest;
 import com.cinx.auth.identity.api.dto.request.BanUserRequest;
-import com.cinx.auth.identity.application.query.AuthorizationState;
 import com.cinx.auth.identity.application.query.IdentityAccountView;
 import com.cinx.auth.identity.domain.AuthorizationRole;
 import com.cinx.auth.identity.domain.BanReasonType;
@@ -10,7 +9,6 @@ import com.cinx.auth.identity.domain.IdentityStatus;
 import org.junit.jupiter.api.Test;
 import org.mapstruct.factory.Mappers;
 
-import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
@@ -34,18 +32,6 @@ class IdentityAccountMapperTest {
         assertThat(response.roles()).containsExactly("LEARNER");
         assertThat(response.banExpiresAt()).isEqualTo(until);
         assertThat(response.changedAt()).isEqualTo(changed);
-    }
-
-    @Test
-    void theAuthorizationStateResponseKeepsTheLastChange() {
-        Instant changed = Instant.parse("2026-08-01T00:00:00Z");
-        Instant at = Instant.parse("2026-08-02T00:00:00Z");
-
-        var response = mapper.toDto(new AuthorizationState("user-1", IdentityStatus.ACTIVE, changed, at));
-
-        assertThat(response.status()).isEqualTo(IdentityStatus.ACTIVE);
-        assertThat(response.changedAt()).isEqualTo(changed);
-        assertThat(response.evaluatedAt()).isEqualTo(at);
     }
 
     @Test

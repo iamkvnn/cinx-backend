@@ -2,6 +2,7 @@ package com.cinx.auth.identity.application;
 
 import com.cinx.auth.identity.application.command.BanUserCommand;
 import com.cinx.auth.identity.application.command.UpdateStaffRolesCommand;
+import com.cinx.auth.identity.application.event.AuthorizationChanged;
 import com.cinx.auth.identity.domain.AuthorizationRole;
 import com.cinx.auth.identity.domain.BanReasonType;
 import com.cinx.auth.identity.domain.IdentityAccount;
@@ -15,6 +16,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -47,35 +49,15 @@ class IdentityServiceTest {
     @Mock AuthorizationAuditLog audits;
     @Mock IdentityEvents events;
     @Mock AuthorizationCatalog catalog;
+    @Mock ApplicationEventPublisher publisher;
     IdentityService service;
 
     @BeforeEach
     void setUp() {
         service = new IdentityService(accounts, keycloak, audits, events, catalog,
-                Clock.fixed(Instant.parse("2026-08-01T00:00:00Z"), ZoneOffset.UTC));
+                Clock.fixed(Instant.parse("2026-08-01T00:00:00Z"), ZoneOffset.UTC), publisher);
         lenient().when(keycloak.findUser("user-1")).thenReturn(Optional.of(USER));
         lenient().when(keycloak.effectiveRoles("user-1")).thenReturn(EnumSet.of(AuthorizationRole.LEARNER));
-    }
-
-    @Test
-    void aUserNobodyTouchedHasActiveStateAndNoChange() {
-        when(accounts.findById("user-1")).thenReturn(Optional.empty());
-
-        var state = service.authorizationState("user-1");
-
-        assertThat(state.status()).isEqualTo(IdentityStatus.ACTIVE);
-        assertThat(state.changedAt()).isNull();
-        verifyNoInteractions(keycloak);
-    }
-
-    @Test
-    void authorizationStateCarriesTheLastChangeAsAnInstant() {
-        when(accounts.findById("user-1")).thenReturn(Optional.of(account(IdentityStatus.BANNED, NOW.minusHours(1))));
-
-        var state = service.authorizationState("user-1");
-
-        assertThat(state.status()).isEqualTo(IdentityStatus.BANNED);
-        assertThat(state.changedAt()).isEqualTo(Instant.parse("2026-07-31T23:00:00Z"));
     }
 
     @Test
@@ -132,7 +114,7 @@ class IdentityServiceTest {
 
         verify(keycloak, never()).addRoles(anyString(), any());
         verify(accounts, never()).save(any());
-        verifyNoInteractions(audits, events);
+        verifyNoInteractions(audits, events, publisher);
     }
 
     @Test
@@ -171,6 +153,8 @@ class IdentityServiceTest {
         assertThat(saved.getValue().getBanExpiresAt()).isEqualTo(NOW.plusDays(7));
         assertThat(saved.getValue().getChangedAt()).isEqualTo(NOW);
         assertThat(view.status()).isEqualTo(IdentityStatus.BANNED);
+        verify(publisher).publishEvent(new AuthorizationChanged("user-1", IdentityStatus.BANNED,
+                Instant.parse("2026-08-01T00:00:00Z")));
     }
 
     @Test
@@ -178,11 +162,78 @@ class IdentityServiceTest {
         when(accounts.lockById("user-1")).thenReturn(Optional.of(account(IdentityStatus.ACTIVE, null)));
         doThrow(new IllegalStateException("keycloak down")).when(keycloak).setEnabled("user-1", false);
 
-        assertThatThrownBy(() -> service.ban("user-1", new BanUserCommand(BanReasonType.SPAM, "links", null)))
+        assertThatThrownBy(() -> service.ban("user-1", new BanUserCommand(BanReasonType.POLICY_ABUSE, "links", null)))
                 .isInstanceOf(IllegalStateException.class);
 
         verify(accounts, never()).save(any());
-        verifyNoInteractions(audits, events);
+        verifyNoInteractions(audits, events, publisher);
+    }
+
+    @Test
+    void aReasonWithAMaximumNeedsOneToThatManyDays() {
+        for (Integer days : new Integer[]{null, 0, 8}) {
+            assertThatThrownBy(() -> service.ban("user-1", new BanUserCommand(BanReasonType.SPAM, "links", days)))
+                    .as("SPAM for %s days", days)
+                    .isInstanceOf(BadRequestException.class);
+        }
+        verifyNoInteractions(keycloak, publisher);
+        verify(accounts, never()).lockById(anyString());
+    }
+
+    @Test
+    void onlyAReasonWithoutAMaximumMayBeIndefinite() {
+        when(accounts.lockById("user-1")).thenReturn(Optional.of(account(IdentityStatus.ACTIVE, null)));
+
+        var view = service.ban("user-1", new BanUserCommand(BanReasonType.POLICY_ABUSE, "fraud", null));
+
+        assertThat(view.banExpiresAt()).isNull();
+        assertThatThrownBy(() -> service.ban("user-1", new BanUserCommand(BanReasonType.POLICY_ABUSE, "fraud", 0)))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void anEndedBanIsLiftedAndAuditedAsExpired() {
+        IdentityAccount banned = account(IdentityStatus.BANNED, NOW.minusDays(7));
+        banned.setBanReason("SPAM");
+        banned.setBanExpiresAt(NOW.minusMinutes(1));
+        when(accounts.lockById("user-1")).thenReturn(Optional.of(banned));
+
+        service.liftExpiredBan("user-1");
+
+        verify(keycloak).setEnabled("user-1", true);
+        assertThat(banned.getStatus()).isEqualTo(IdentityStatus.ACTIVE);
+        assertThat(banned.getBanExpiresAt()).isNull();
+        ArgumentCaptor<AuthorizationAuditEntry> audit = ArgumentCaptor.forClass(AuthorizationAuditEntry.class);
+        verify(audits).append(audit.capture());
+        assertThat(audit.getValue().action()).isEqualTo("BAN_EXPIRED");
+        verify(publisher).publishEvent(new AuthorizationChanged("user-1", IdentityStatus.ACTIVE,
+                Instant.parse("2026-08-01T00:00:00Z")));
+    }
+
+    @Test
+    void aBanThatChangedSinceTheJobListedItIsLeftAlone() {
+        IdentityAccount extended = account(IdentityStatus.BANNED, NOW.minusDays(7));
+        extended.setBanExpiresAt(NOW.plusDays(3));
+        when(accounts.lockById("user-1")).thenReturn(Optional.of(extended));
+        when(accounts.lockById("user-2")).thenReturn(Optional.of(account(IdentityStatus.ACTIVE, NOW.minusHours(1))));
+        IdentityAccount indefinite = account(IdentityStatus.BANNED, NOW.minusDays(7));
+        when(accounts.lockById("user-3")).thenReturn(Optional.of(indefinite));
+
+        service.liftExpiredBan("user-1");
+        service.liftExpiredBan("user-2");
+        service.liftExpiredBan("user-3");
+        service.liftExpiredBan("ghost");
+
+        verify(keycloak, never()).setEnabled(anyString(), eq(true));
+        verify(accounts, never()).save(any());
+        verifyNoInteractions(audits, events, publisher);
+    }
+
+    @Test
+    void expiredBansAreLookedUpAtTheServiceClock() {
+        when(accounts.findExpiredBans(NOW, 100)).thenReturn(List.of("user-1"));
+
+        assertThat(service.findExpiredBans(100)).containsExactly("user-1");
     }
 
     @Test

@@ -2,10 +2,6 @@ package com.cinx.auth.config;
 
 import com.cinx.common.security.CinxJwtAuthenticationConverter;
 import com.cinx.common.security.KeycloakJwtDecoderFactory;
-import com.cinx.common.security.AuthorizationFreshnessFilter;
-import com.cinx.common.security.AuthorizationFreshnessVerifier;
-import com.cinx.common.security.AuthorizationState;
-import com.cinx.auth.identity.application.IIdentityService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -17,11 +13,8 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 
 import java.util.Set;
-import java.time.Clock;
-import java.time.Duration;
 
 @RequiredArgsConstructor
 @Configuration
@@ -49,7 +42,7 @@ public class SecurityConfig {
 
     @Bean
     @Order(2)
-    SecurityFilterChain userSecurity(HttpSecurity http, AuthorizationFreshnessFilter freshnessFilter) throws Exception {
+    SecurityFilterChain userSecurity(HttpSecurity http) throws Exception {
         http.csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/actuator/**", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/webjars/**").permitAll()
@@ -58,21 +51,7 @@ public class SecurityConfig {
                                 .jwtAuthenticationConverter(new CinxJwtAuthenticationConverter()))
                         .authenticationEntryPoint(entryPoint).accessDeniedHandler(deniedHandler))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
-        http.addFilterAfter(freshnessFilter, BearerTokenAuthenticationFilter.class);
         return http.build();
-    }
-
-    @Bean
-    AuthorizationFreshnessVerifier authorizationFreshnessVerifier(IIdentityService identities, Clock clock) {
-        return new AuthorizationFreshnessVerifier(userId -> {
-            var state = identities.authorizationState(userId);
-            return new AuthorizationState(state.userId(), state.status().name(), state.changedAt(), state.evaluatedAt());
-        }, clock, Duration.ZERO);
-    }
-
-    @Bean
-    AuthorizationFreshnessFilter authorizationFreshnessFilter(AuthorizationFreshnessVerifier verifier) {
-        return new AuthorizationFreshnessFilter(verifier);
     }
 
     JwtDecoder userDecoder() {

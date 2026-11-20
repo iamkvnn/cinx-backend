@@ -1,13 +1,14 @@
 # CINX authentication and authorization specification
 
-Status: **proposed target design**
+Status: **implemented**, except two-person approval for granting
+`PLATFORM_ADMIN` and `BREAK_GLASS_ADMIN`, and detection of role assignments
+edited by hand in Keycloak (see section 8).
 
 Applies to: gateway, Keycloak, auth, common-security, all Java resource
 servers, recommendation HTTP/SSE and notification WebSocket.
 
-This document is normative for the target implementation. It deliberately
-describes a breaking pre-release cutover; current code still has the gaps
-listed in the final review.
+This document is normative. Where the code has not caught up, the section says
+so; the code wins.
 
 ## 1. Goals and non-goals
 
@@ -68,7 +69,7 @@ runtime authority:       PERM_learning.course.update.own
 | Credentials, MFA, login sessions | Keycloak | None |
 | Account status (`ACTIVE`/`BANNED`, ban fields) | Auth DB (`identity_account`) | Keycloak `enabled` flag, set by auth in the same command |
 | User-to-role assignment | Keycloak realm roles | Token `roles`/`permissions` claims; auth announces changes |
-| Time of the last authorization change | Auth DB (`identity_account.changed_at`) | Token freshness check, event ordering |
+| Time of the last authorization change | Auth DB (`identity_account.changed_at`) | Redis key read by the gateway's token freshness check (section 18), event ordering |
 | CINX user id | Keycloak `sub` | Every service; there is no separate id |
 | Role/permission definitions and composites | Canonical version-controlled authorization catalog | Auth validation and Keycloak realm composites |
 | OAuth clients, flows and token mappers | Version-controlled Keycloak realm config | Deployed Keycloak |
@@ -144,7 +145,7 @@ Can use advanced recommendation =
   PERM_recommendation.agent.use
   AND session.userId == principal.sub
   AND feature recommendation.agent.advanced is active
-  AND recommendation.agent.requests quota can be reserved
+  AND assistant.credits quota can be reserved
 ```
 
 ## 5. Trust boundaries
@@ -242,7 +243,7 @@ never calls an auth role-grant API and cannot create `INSTRUCTOR`.
 | `cinx-web` | Public, Authorization Code + PKCE | Browser login |
 | `cinx-api` | Resource client | User-facing permission catalog and audience |
 | `cinx-auth-admin` | Confidential service account | Restricted Keycloak user administration only |
-| `cinx-gateway-service` | Confidential | Gateway token-freshness state reads only |
+| `cinx-gateway-service` | Confidential | None: the gateway reads Redis, not auth; the client and its permission are still in the realm |
 | `cinx-auth-service` | Confidential | Auth outbound service calls |
 | `cinx-user-service` | Confidential | User outbound service calls |
 | `cinx-commerce-service` | Confidential | Commerce outbound service calls |
@@ -434,8 +435,8 @@ Initial service-account grants:
 | Target resource | Caller | Permission |
 |---|---|---|
 | `cinx-auth-internal` | `cinx-notification-service` | `auth.internal.permission-members.read` |
-| `cinx-auth-internal` | `cinx-gateway-service`, `cinx-user-service`, `cinx-commerce-service`, `cinx-learning-service`, `cinx-notification-service`, `cinx-reporting-service`, `cinx-recommendation-service` | `auth.internal.authorization-state.read` |
 | `cinx-user-internal` | `cinx-learning-service`, `cinx-notification-service` | `user.internal.profile.read` |
+| `cinx-user-internal` | `cinx-campus-service` | `user.internal.friends.read` |
 | `cinx-commerce-internal` | `cinx-learning-service`, `cinx-recommendation-service` | `commerce.internal.entitlement.read` |
 | `cinx-learning-internal` | `cinx-commerce-service`, `cinx-notification-service`, `cinx-recommendation-service` | `learning.internal.course.read` |
 | `cinx-learning-internal` | `cinx-notification-service`, `cinx-reporting-service` | `learning.internal.enrollment.read` |
@@ -518,7 +519,7 @@ auth.account.suspend.any
 auth.account.reactivate.any
 auth.role.assign.any
 auth.internal.permission-members.read
-auth.internal.authorization-state.read
+auth.internal.authorization-state.read   (no endpoint checks it)
 
 user.profile.read.self
 user.profile.read.any
@@ -529,6 +530,7 @@ user.instructor.review.any
 user.policy.manage.any
 user.policy.publish.any
 user.internal.profile.read
+user.internal.friends.read
 
 commerce.cart.manage.self
 commerce.wishlist.manage.self
@@ -738,8 +740,8 @@ an explicit `.any` permission.
 
 - JWT is mandatory for protected routes and SSE handshake.
 - Validate signature, issuer, audience, time and `token_kind=user`.
-- Principal is `sub`. The token freshness check of section 18 applies
-  (`recommendation/app/agent/auth.py`).
+- Principal is `sub`. The token freshness check of section 18 runs at the
+  gateway, not here (`recommendation/app/agent/auth.py`).
 - Session/proposal queries use `(session_id, user_id)`.
 - `/users/me` is the normal user API; arbitrary user reads require
   `recommendation.user.read.any`.
@@ -789,28 +791,14 @@ token kind: service
 permission: auth.internal.permission-members.read
 ```
 
-Token freshness state:
-
-```text
-GET /internal/identity/accounts/{userId}/authorization-state
-
-audience:   cinx-auth-internal
-token kind: service
-permission: auth.internal.authorization-state.read
-response:   userId, status, changedAt, evaluatedAt
-```
-
-Callers use this only to check a token against the user's last authorization
-change (section 18). It is not an endpoint for enumerating users or delegating
-role management.
-
 ## 14. WebSocket authentication and authorization
 
 Notification WebSocket MUST:
 
 - use configured allowed origins, never `"*"`;
 - require a bearer token in STOMP `CONNECT`;
-- reject missing, invalid or expired tokens;
+- reject missing, invalid or expired tokens (the token freshness check of
+  section 18 is the gateway's and does not see a token inside a STOMP frame);
 - use `CinxJwtAuthenticationConverter` so principal equals `sub`;
 - permit subscription only to `/user/queue/notifications`;
 - deny direct subscription to broker `/queue/**` and `/topic/**`;
@@ -886,8 +874,18 @@ A role/status command (`IdentityService`):
    `authorization_audit` row and enqueues the `auth.authorization.changed`
    outbox event.
 
+After the commit, auth writes the change to Redis for the gateway (section 18).
 A disabled Keycloak user cannot sign in or refresh. A role change reaches a
 user's next token through the freshness check in section 18.
+
+A ban's reason sets how long it may last (`BanReasonType.maxDurationDays`). A
+reason with a maximum needs a duration of 1 to that many days; only a reason
+without one (`POLICY_ABUSE`) may be indefinite, with the duration left empty.
+`IdentityService.ban` answers `400` otherwise, and the admin `BanUserDialog`
+mirrors the same ranges and starts at the reason's maximum. `BanExpiryJob`
+lifts ended bans every five minutes (`app.ban-expiry.delay-ms`): under the row
+lock it re-checks that the ban is still in force and has ended, then
+reactivates the user like `unban`, with the audit action `BAN_EXPIRED`.
 
 `INSTRUCTOR` is added and removed from `user.instructor.verified` and
 `user.instructor.terminated`. Auth no longer consumes `user.profile.onboarded`
@@ -958,36 +956,51 @@ renewal at the latest (token lifetime in section 6).
 
 ## 18. Token freshness
 
-Token freshness covers account suspension/ban and role changes. Auth records
-the time of each change in `identity_account.changed_at` and serves it from:
+Token freshness covers account suspension/ban and role changes, including a
+role being granted. Auth records the time of each change in
+`identity_account.changed_at`. After the transaction commits, it writes the
+change to Redis (`RedisAuthorizationChangeSignal`):
 
 ```text
-GET /internal/identity/accounts/{userId}/authorization-state
-  -> {userId, status, changedAt, evaluatedAt}
+key:   authz:changed:{userId}
+value: <STATUS> <changedAt in epoch milliseconds>     e.g. BANNED 1763114400700
+TTL:   360 s (the realm's 300 s access-token lifespan plus a minute)
 ```
 
-An unknown user is `ACTIVE` with `changedAt` null. The gateway
-(`AuthorizationFreshnessWebFilter`), Java resource servers
-(`AuthorizationFreshnessVerifier` and its filter in `common`) and the Python
-services (`recommendation/app/agent/auth.py`, `assistant/app/security/auth.py`)
-read this state, cached for at most five seconds, and allow a user token when:
+The format is defined once, in `common-security` `AuthorizationChangeKey`. The
+write keeps the newer of two changes when two commits for one user reach Redis
+out of order.
+
+Only the gateway checks freshness (`AuthorizationFreshnessWebFilter`). For each
+request with a user token it reads the key of the token's `sub`:
 
 ```text
-status == ACTIVE AND (changedAt == null OR iat >= floor_to_second(changedAt))
+no key                       -> allow
+key, status == ACTIVE AND iat >= floor_to_second(changedAt)  -> allow
+key, otherwise               -> 401 TOKEN_AUTHORIZATION_STALE
 ```
 
-Otherwise they answer `401 TOKEN_AUTHORIZATION_STALE`. `changedAt` is floored
-to the second because `iat` has whole seconds and the web retries a 401 only
-once after a silent renew (`TokenFreshness`). The web renews silently on that
-401 and obtains the new roles; a refresh-token grant re-runs the Keycloak
-protocol mappers. A banned user cannot renew, because the Keycloak user is
-disabled.
+`changedAt` is floored to the second because `iat` has whole seconds and the
+web retries a 401 only once after a silent renew (`TokenFreshness`). The web
+renews silently on that 401 and obtains the new roles; a refresh-token grant
+re-runs the Keycloak protocol mappers. A banned user cannot renew, because the
+Keycloak user is disabled.
 
-A protected operation whose state is stale or unavailable performs the
-authenticated state read or fails closed; it never silently falls back to
-token expiry. Permission increases do not invalidate a token; the user renews
-to obtain the new permission set. A fresh token that no longer has the
-operation permission receives the normal `403 PERMISSION_DENIED`.
+The resource services, the Python services and the notification WebSocket
+verify the JWT only; they trust the gateway for freshness. A request that
+reaches a service without passing the gateway can use a stale token until it
+expires.
+
+The check fails open. When Redis cannot answer within 50 ms, or holds a value
+it cannot read, the gateway lets the request through and logs a warning at
+most once a minute. A revocation is also lost when Redis is down at the moment
+auth writes, when auth stops between the commit and the write, or when Redis
+restarts within six minutes of a change. In each case the stale token stays
+usable until it expires, at most five minutes; the change itself is stored, and
+Keycloak refuses the next refresh of a banned user.
+
+A fresh token that no longer has the operation permission receives the normal
+`403 PERMISSION_DENIED`.
 
 ## 19. HTTP failure semantics
 
@@ -1125,8 +1138,8 @@ Confirmed for v1:
 
 - frontend is a pure SPA using Authorization Code + PKCE and bearer access
   tokens;
-- privilege reduction uses the status/`changedAt` token freshness check with a
-  five-second cache;
+- privilege reduction uses the status/`changedAt` token freshness check at the
+  gateway, fed by Redis, which lets requests through when Redis cannot answer;
 - learner/instructor plan segmentation is purchase eligibility only and cannot
   grant an authorization role.
 
