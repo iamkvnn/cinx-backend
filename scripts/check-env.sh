@@ -3,8 +3,10 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-services=(auth commerce gateway learning user)
+services=(auth commerce gateway learning notification user)
 python_configs=()
+# Node services read their settings in one config module, like the Python ones
+node_configs=(campus/src/config.ts runner/src/config.ts)
 failures=0
 
 fail() { echo "FAIL: $*"; failures=$((failures + 1)); }
@@ -41,7 +43,7 @@ for var in $(no_default_vars */src/main/resources/application-local.yaml; \
   echo "$local_known" | grep -qx "$var" || fail "a service reads $var on the host, missing from env/local.env.example"
 done
 for var in $local_known; do
-  referenced "$var" */src/main/resources/application*.yaml || grep -qsw -e "$var" "${python_configs[@]}" \
+  referenced "$var" */src/main/resources/application*.yaml || grep -qsw -e "$var" "${python_configs[@]}" "${node_configs[@]}" \
     || fail "env/local.env.example defines $var, which nothing reads"
 done
 
