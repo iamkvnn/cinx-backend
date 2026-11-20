@@ -3,7 +3,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-services=(auth commerce gateway learning notification user)
+services=(auth commerce gateway learning notification reporting user)
 python_configs=()
 # Node services read their settings in one config module, like the Python ones
 node_configs=(campus/src/config.ts runner/src/config.ts)
