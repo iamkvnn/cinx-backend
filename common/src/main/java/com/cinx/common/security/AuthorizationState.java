@@ -2,6 +2,6 @@ package com.cinx.common.security;
 
 import java.time.Instant;
 
-public record AuthorizationState(String userId, String status, long authorizationVersion,
-                                 long authorizationPolicyVersion, Instant evaluatedAt) {
+/** Auth's view of a user: their status, and the last authorization change ({@code changedAt}, null when none). */
+public record AuthorizationState(String userId, String status, Instant changedAt, Instant evaluatedAt) {
 }

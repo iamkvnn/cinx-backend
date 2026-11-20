@@ -46,13 +46,6 @@ public class AuthRabbitMQConfig {
     }
 
     @Bean
-    public Binding profileOnboardedBinding() {
-        return BindingBuilder.bind(identityUserLifecycleQueue())
-                .to(userEventsExchange())
-                .with("user.profile.onboarded");
-    }
-
-    @Bean
     public Binding instructorVerifiedBinding() {
         return BindingBuilder.bind(identityUserLifecycleQueue())
                 .to(userEventsExchange())

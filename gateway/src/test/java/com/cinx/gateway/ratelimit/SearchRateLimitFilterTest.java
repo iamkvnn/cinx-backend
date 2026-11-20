@@ -77,7 +77,7 @@ class SearchRateLimitFilterTest {
     }
 
     @Test
-    void aSignedInUserIsCountedByUidWithTheUserLimit() {
+    void aSignedInUserIsCountedBySubWithTheUserLimit() {
         for (int i = 0; i < 6; i++) run(user("u1", "203.0.113.7"));
 
         assertThat(passed).hasValue(5);
@@ -130,8 +130,8 @@ class SearchRateLimitFilterTest {
                 .remoteAddress(address(ip)).header("X-Forwarded-For", forwardedFor));
     }
 
-    private static ServerWebExchange user(String uid, String ip) {
-        Jwt jwt = Jwt.withTokenValue("t").header("alg", "none").claim("uid", uid).subject("sub-" + uid).build();
+    private static ServerWebExchange user(String sub, String ip) {
+        Jwt jwt = Jwt.withTokenValue("t").header("alg", "none").subject(sub).build();
         return guest(ip).mutate().principal(Mono.just(new JwtAuthenticationToken(jwt))).build();
     }
 

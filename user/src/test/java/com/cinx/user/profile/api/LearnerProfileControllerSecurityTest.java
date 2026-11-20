@@ -53,20 +53,20 @@ class LearnerProfileControllerSecurityTest {
     @Test
     void writingNeedsTheUpdatePermission() throws Exception {
         mockMvc.perform(put(PATH).contentType(MediaType.APPLICATION_JSON).content(BODY)
-                        .with(jwt().jwt(j -> j.claim("uid", "u1")).authorities(new SimpleGrantedAuthority("PERM_user.profile.read.self"))))
+                        .with(jwt().jwt(j -> j.subject("u1")).authorities(new SimpleGrantedAuthority("PERM_user.profile.read.self"))))
                 .andExpect(status().isForbidden());
         mockMvc.perform(post(PATH + "/skip")
-                        .with(jwt().jwt(j -> j.claim("uid", "u1")).authorities(new SimpleGrantedAuthority("PERM_user.profile.read.self"))))
+                        .with(jwt().jwt(j -> j.subject("u1")).authorities(new SimpleGrantedAuthority("PERM_user.profile.read.self"))))
                 .andExpect(status().isForbidden());
         verifyNoInteractions(learnerProfiles);
     }
 
     @Test
     void theProfileIsAlwaysTheTokensOwn() throws Exception {
-        mockMvc.perform(get(PATH).with(jwt().jwt(j -> j.claim("uid", "u1")).authorities(new SimpleGrantedAuthority("PERM_user.profile.read.self"))))
+        mockMvc.perform(get(PATH).with(jwt().jwt(j -> j.subject("u1")).authorities(new SimpleGrantedAuthority("PERM_user.profile.read.self"))))
                 .andExpect(status().isOk());
         mockMvc.perform(put(PATH).contentType(MediaType.APPLICATION_JSON).content(BODY)
-                        .with(jwt().jwt(j -> j.claim("uid", "u1")).authorities(new SimpleGrantedAuthority("PERM_user.profile.update.self"))))
+                        .with(jwt().jwt(j -> j.subject("u1")).authorities(new SimpleGrantedAuthority("PERM_user.profile.update.self"))))
                 .andExpect(status().isOk());
         verify(learnerProfiles).get("u1");
         verify(learnerProfiles).save(eq("u1"), any());
@@ -75,7 +75,7 @@ class LearnerProfileControllerSecurityTest {
     @Test
     void anUnknownGoalIsABadRequest() throws Exception {
         mockMvc.perform(put(PATH).contentType(MediaType.APPLICATION_JSON).content("{\"goal\":\"GET_RICH\"}")
-                        .with(jwt().jwt(j -> j.claim("uid", "u1")).authorities(new SimpleGrantedAuthority("PERM_user.profile.update.self"))))
+                        .with(jwt().jwt(j -> j.subject("u1")).authorities(new SimpleGrantedAuthority("PERM_user.profile.update.self"))))
                 .andExpect(status().isBadRequest());
         verifyNoInteractions(learnerProfiles);
     }

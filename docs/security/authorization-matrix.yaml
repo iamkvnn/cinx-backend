@@ -15,12 +15,9 @@ coverage:
 
 defaults:
   decision: deny
-  principalClaim: uid
-  principalFallbackClaim: sub
-  principalFallbackAllowedOperations:
-    - user.profile-onboard-self
+  principalClaim: sub
   requiredClaimsForOrdinaryUserOperations:
-    - uid
+    - sub
   userAudience: cinx-api
   userTokenKind: user
   serviceTokenKind: service
@@ -248,13 +245,12 @@ operations:
       tokenKind: user
       audiences: [cinx-api]
       requiredClaims: [sub]
-      uidMayBeAbsent: true
     authorization:
       permissionsAll: []
       relationship: self
       attributes:
         - this is the only permissionless authenticated onboarding exception
-        - first-token identity is derived from sub when uid is not present
+        - identity is derived from sub; the first token already carries LEARNER
         - body cannot select or grant an authorization role
         - instructor application is stored as workflow state
         - acceptedPolicyIds must be published policies and cover each published TERMS and PRIVACY type; the agreement is stored in policy_acceptance
@@ -2313,7 +2309,7 @@ operations:
         - without a token it is a guest search with no access or wishlist flags; a token that is present must be valid (401 otherwise)
         - access and wishlist flags are computed for the caller from the token subject
         - the assistant calls it with a token exchanged for cinx-api, never the user's own token
-        - the gateway limits it per minute, 30 for a guest (HMAC of the IP, no raw IP kept) and 120 for a user (uid); 429 beyond, and no limit while Redis is down
+        - the gateway limits it per minute, 30 for a guest (HMAC of the IP, no raw IP kept) and 120 for a user (sub); 429 beyond, and no limit while Redis is down
       entitlement: null
       quota: null
     audit: none
@@ -2538,7 +2534,7 @@ operations:
       permissionsAll: []
       relationship: self
       attributes:
-        - only the caller's own variants of running experiments; a hash of the token's uid, no stored row
+        - only the caller's own variants of running experiments; a hash of the token's sub, no stored row
       entitlement: null
       quota: null
     audit: none

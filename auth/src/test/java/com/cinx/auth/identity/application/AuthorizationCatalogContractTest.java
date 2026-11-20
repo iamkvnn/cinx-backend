@@ -17,7 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class AuthorizationCatalogContractTest {
     @Test
-    void catalogRolesMatchCodeAndRealmHasRequiredClaimAndServiceClients() throws Exception {
+    void catalogRolesMatchCodeAndRealmHasRequiredClaimsAndServiceClients() throws Exception {
         AuthorizationCatalog catalog = new AuthorizationCatalog();
         assertThat(catalog.roles()).containsExactlyInAnyOrder(AuthorizationRole.values());
         assertThat(catalog.policyVersion()).isPositive();
@@ -41,9 +41,10 @@ class AuthorizationCatalogContractTest {
                 "cinx-user-service", "cinx-commerce-service", "cinx-learning-service",
                 "cinx-notification-service", "cinx-reporting-service", "cinx-recommendation-service",
                 "cinx-assistant-service");
-        assertThat(realm.toString()).contains("\"claim.name\":\"permissions\"",
-                "\"claim.name\":\"token_kind\"", "\"claim.name\":\"authz_ver\"",
-                "\"claim.name\":\"authz_not_after\"");
+        assertThat(realm.toString()).contains("\"claim.name\":\"permissions\"", "\"claim.name\":\"token_kind\"");
+        // Keycloak owns roles and the user id is the subject: no claim auth used to write into Keycloak remains
+        assertThat(realm.toString()).doesNotContain("\"claim.name\":\"authz_ver\"",
+                "\"claim.name\":\"authz_not_after\"", "\"claim.name\":\"uid\"");
         assertThat(realm.toString()).doesNotContain("INSTRUCTOR_APPLICANT", "\"name\":\"ADMIN\"");
     }
 

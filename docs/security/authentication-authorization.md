@@ -21,7 +21,7 @@ listed in the final review.
 - Explicit service identity for every `/internal/**` operation.
 - A clear separation between security permission, subscription feature access
   and quota.
-- Durable, auditable role/status changes and Keycloak reconciliation.
+- Auditable role/status changes, with Keycloak as the owner of roles and sessions.
 - Consistent `401`, `403`, `404`, `409` and `429` behavior.
 
 ### Non-goals
@@ -66,8 +66,10 @@ runtime authority:       PERM_learning.course.update.own
 | State | Source of truth | Projection/consumer |
 |---|---|---|
 | Credentials, MFA, login sessions | Keycloak | None |
-| Account status | Auth DB | Keycloak enabled state; required bounded denial/version projection |
-| User-to-role assignment | Auth DB | Keycloak role mappings |
+| Account status (`ACTIVE`/`BANNED`, ban fields) | Auth DB (`identity_account`) | Keycloak `enabled` flag, set by auth in the same command |
+| User-to-role assignment | Keycloak realm roles | Token `roles`/`permissions` claims; auth announces changes |
+| Time of the last authorization change | Auth DB (`identity_account.changed_at`) | Token freshness check, event ordering |
+| CINX user id | Keycloak `sub` | Every service; there is no separate id |
 | Role/permission definitions and composites | Canonical version-controlled authorization catalog | Auth validation and Keycloak realm composites |
 | OAuth clients, flows and token mappers | Version-controlled Keycloak realm config | Deployed Keycloak |
 | Effective token claims | Keycloak | Gateway and resource services |
@@ -75,13 +77,18 @@ runtime authority:       PERM_learning.course.update.own
 | Plan/subscription/feature grants | Commerce DB | Local feature projections |
 | Quota usage/reservations | Feature-consuming service DB | Reporting metrics only |
 
-Production administrators MUST NOT edit ordinary CINX user role assignments
-directly in Keycloak. All grants/revokes, including application break-glass
-access, go through auth. `BREAK_GLASS_ADMIN` is a time-bound auth-DB grant with
-MFA, alerting and post-use review. A separate Keycloak infrastructure
-administrator may repair the identity platform, but MUST NOT create an
-ordinary CINX application-role assignment; reconciliation treats such a
-mapping as drift.
+Keycloak owns realm roles. `LEARNER` comes from the realm default roles, so
+every new user has it from the first token. Production administrators change
+ordinary CINX role assignments through auth (`PUT /api/v1/identity/accounts/{userId}/roles`),
+which writes Keycloak through the admin API and records the audit row and the
+event. `INSTRUCTOR` is added and removed by auth from the user-domain
+`user.instructor.verified` / `user.instructor.terminated` events.
+`BREAK_GLASS_ADMIN` needs MFA, alerting and post-use review, and has no expiry:
+time-limited role grants do not exist, so the role is removed by an explicit
+revoke. A separate Keycloak infrastructure administrator may repair the
+identity platform, but SHOULD NOT create ordinary CINX role assignments by
+hand; auth does not detect or reconcile such a change, and it takes effect on
+the user's next token.
 
 Auth DB does not need an `account_permission` table in v1. Effective
 permissions are derived from version-controlled role composites. Direct
@@ -125,7 +132,7 @@ Can update course =
   PERM_learning.course.update.any
   OR (
     PERM_learning.course.update.own
-    AND active course membership for principal.uid has role OWNER, MANAGER or EDITOR
+    AND active course membership for principal.sub has role OWNER, MANAGER or EDITOR
     AND course.status in [DRAFT, REJECTED]
   )
 ```
@@ -135,7 +142,7 @@ Example with subscription:
 ```text
 Can use advanced recommendation =
   PERM_recommendation.agent.use
-  AND session.userId == principal.uid
+  AND session.userId == principal.sub
   AND feature recommendation.agent.advanced is active
   AND recommendation.agent.requests quota can be reserved
 ```
@@ -200,37 +207,31 @@ Reference: [OAuth 2.0 Security Best Current Practice, RFC 9700](https://www.rfc-
 
 ## 7. Identity onboarding
 
-Target v1 uses the Keycloak subject as the initial stable CINX identifier:
+The CINX user id is the Keycloak subject, always:
 
 ```text
-uid = Keycloak sub
+userId = Keycloak sub
 ```
 
-The explicit `uid` claim is retained so services are insulated from a future
-identity migration. The flow is:
+There is no `uid` claim or user-profile attribute. The flow is:
 
-1. User registers/logs in through Keycloak.
-2. The first token can contain only `sub`; converter fallback permits the
-   explicitly allowlisted, authenticated onboarding operation only.
+1. User registers/logs in through Keycloak. The first token already carries
+   `LEARNER` (realm default role) and its permissions, so it works on every
+   route.
+2. `GET /api/v1/profiles/me` returns `404` until a profile exists; the web app
+   then routes to `/onboarding`.
 3. `POST /api/v1/profiles/me/onboarding` derives identity from the token and
-   creates the user profile.
-4. User emits a durable `user.profile.onboarded` event.
-5. Auth consumes it with a durable inbox, creates the identity account, grants
-   `LEARNER`, increments `authorization_version`, updates the Keycloak `uid`
-   attribute and role mapping.
-6. Auth revokes/refreshes the session so a new token contains `uid`, roles and
-   permissions.
-7. Instructor application is a separate user-domain workflow. Only a verified
+   creates the user profile. The SPA keeps the same token; no re-sign-in.
+4. Auth takes no part in onboarding and creates no account row. An
+   `identity_account` row (`user_id` = `sub`) is created lazily on the first
+   admin action or instructor event for that user.
+5. Instructor application is a separate user-domain workflow. Only a verified
    application adds `INSTRUCTOR`; it does not replace `LEARNER`.
 
 `INSTRUCTOR_APPLICANT` MUST NOT remain an authorization role.
 Granting `INSTRUCTOR` only makes instructor-targeted plans eligible. It never
 buys or upgrades one. Buying, renewing, canceling or adjusting a subscription
 never calls an auth role-grant API and cannot create `INSTRUCTOR`.
-
-If a future implementation needs a CINX-generated ID different from `sub`,
-that decision must be made before data is created and an authenticated auth
-bootstrap endpoint must allocate it before profile onboarding.
 
 ## 8. Keycloak target configuration
 
@@ -241,7 +242,7 @@ bootstrap endpoint must allocate it before profile onboarding.
 | `cinx-web` | Public, Authorization Code + PKCE | Browser login |
 | `cinx-api` | Resource client | User-facing permission catalog and audience |
 | `cinx-auth-admin` | Confidential service account | Restricted Keycloak user administration only |
-| `cinx-gateway-service` | Confidential | Gateway revocation-state rehydration only |
+| `cinx-gateway-service` | Confidential | Gateway token-freshness state reads only |
 | `cinx-auth-service` | Confidential | Auth outbound service calls |
 | `cinx-user-service` | Confidential | User outbound service calls |
 | `cinx-commerce-service` | Confidential | Commerce outbound service calls |
@@ -290,7 +291,7 @@ Human-facing application roles are additive composite roles:
 | `NOTIFICATION_OPERATOR` | Send audited platform broadcasts |
 | `AI_OPERATOR` | Restricted recommendation support/debug operations |
 | `PLATFORM_ADMIN` | Exact composite defined in the authorization catalog |
-| `BREAK_GLASS_ADMIN` | Emergency-only, MFA and time-bound |
+| `BREAK_GLASS_ADMIN` | Emergency-only, MFA, removed by an explicit revoke |
 
 User-facing permissions are client roles of `cinx-api`. Human roles are
 composites of those client roles. Internal permissions are client roles of
@@ -444,15 +445,15 @@ matrix and internal OpenAPI must agree with this table before release.
 
 Role-assignment delegation is also catalog policy:
 
-- `LEARNER` is granted only by the onboarding system command.
+- `LEARNER` comes from the Keycloak realm default roles; no command grants it.
 - `INSTRUCTOR` is granted/revoked only from a verified user-domain
   partnership workflow.
 - `IDENTITY_ADMIN` may grant ordinary staff bundles to another user with MFA,
   reason and audit, but cannot grant to self.
 - `PLATFORM_ADMIN` requires two distinct approved actors, at least one current
   platform administrator, and last-admin protection.
-- `BREAK_GLASS_ADMIN` requires two-person approval, a maximum 60-minute
-  expiry, incident reference, immediate alert and post-use review.
+- `BREAK_GLASS_ADMIN` requires two-person approval, incident reference,
+  immediate alert and post-use review. The role has no automatic expiry.
 - No human grant flow can grant a service/internal permission.
 
 `auth.role.assign.any` authorizes entry into this policy; it does not mean the
@@ -468,8 +469,8 @@ never be included by a human role, `PLATFORM_ADMIN` or
 `PLATFORM_ADMIN` MUST NOT imply Keycloak `realm-management`.
 
 The `cinx-auth-admin` service account currently has broad view/query
-permissions. Reduce it to user lookup, user attribute update, role mapping,
-enable/disable and logout operations actually used by auth.
+permissions. Reduce it to user lookup, role mapping and enable/disable
+operations actually used by auth.
 
 Keycloak supports realm roles, client roles, composite roles and service
 account roles; see the
@@ -482,7 +483,7 @@ account roles; see the
 - `FINANCE_OPERATOR`, `IDENTITY_ADMIN`, `PLATFORM_ADMIN` and
   `BREAK_GLASS_ADMIN` SHOULD require phishing-resistant WebAuthn when
   operationally possible.
-- Break-glass access MUST have alerting, short validity and post-use review.
+- Break-glass access MUST have alerting and post-use review.
 
 `mfaRequired: true` in the authorization matrix is a runtime step-up rule, not
 documentation only:
@@ -590,15 +591,12 @@ operation MUST be added there before implementation is complete.
   "aud": ["cinx-api"],
   "azp": "cinx-web",
   "token_kind": "user",
-  "uid": "cinx-user-id",
   "roles": ["LEARNER", "INSTRUCTOR"],
   "permissions": [
     "learning.course.create",
     "learning.course.update.own"
   ],
   "scope": "openid profile email",
-  "authz_ver": 7,
-  "authz_policy_ver": 3,
   "acr": "urn:cinx:loa:2",
   "amr": ["pwd", "otp"],
   "auth_time": 1785479100,
@@ -618,24 +616,20 @@ operation MUST be added there before implementation is complete.
   "permissions": [
     "auth.internal.permission-members.read"
   ],
-  "authz_policy_ver": 3,
   "exp": 1785480000
 }
 ```
 
 ### Claim rules
 
-- `uid` is `Authentication.name`; fallback to `sub` is accepted only for
-  bootstrap compatibility.
+- `sub` is the CINX user id and `Authentication.name`. There is no `uid`
+  claim.
 - `roles` contains only CINX human/composite role names.
 - `permissions` contains effective application permission names without
   prefixes.
 - `scope` remains a space-delimited OAuth scope claim.
-- `authz_ver` is a monotonic per-user authorization version.
-- `authz_policy_ver` identifies the canonical role/permission catalog version.
-- `authz_not_after`, when present, is the earliest expiry of an effective
-  time-bound role grant. Resource servers reject the token at or after that
-  instant even when `exp` is later.
+- `iat` is compared with the user's last authorization change (section 18);
+  no per-user version or deadline claim exists.
 - `acr`, `amr` and `auth_time` support runtime step-up checks.
 - A plan claim, if emitted for UI convenience, MUST NOT become an authority or
   the final entitlement decision.
@@ -650,7 +644,6 @@ All resource servers MUST validate:
 - exact issuer;
 - required target audience;
 - `exp` and `nbf`;
-- optional `authz_not_after`;
 - `token_kind`;
 - caller/client constraints for internal routes.
 
@@ -659,9 +652,8 @@ chains accept only `token_kind=service` and their target internal audience.
 A service token MUST NOT be accepted as a human user merely because it has a
 valid Keycloak signature.
 
-Ordinary user operations also require an explicit `uid` claim. The one
-allowlisted onboarding operation may accept a first token with `sub` and no
-`uid`; converter fallback alone does not authorize any other route.
+A user token needs only `sub`; a new user's first token is valid on every
+route.
 
 ## 11. `CinxJwtAuthenticationConverter`
 
@@ -671,8 +663,7 @@ allowlisted onboarding operation may accept a first token with `sub` and no
 roles[]       -> ROLE_*
 permissions[] -> PERM_*
 scope         -> SCOPE_*
-uid           -> principal
-sub           -> bootstrap fallback
+sub           -> principal
 ```
 
 Implementation requirements:
@@ -695,7 +686,7 @@ Implementation requirements:
 Required tests:
 
 - direct and exact-client roles/permissions;
-- `uid` and `sub` fallback;
+- `sub` as the principal;
 - malformed, blank and duplicate claims;
 - scope never becomes a role/permission;
 - infrastructure roles are excluded;
@@ -747,7 +738,8 @@ an explicit `.any` permission.
 
 - JWT is mandatory for protected routes and SSE handshake.
 - Validate signature, issuer, audience, time and `token_kind=user`.
-- Principal is `uid`, fallback `sub`.
+- Principal is `sub`. The token freshness check of section 18 applies
+  (`recommendation/app/agent/auth.py`).
 - Session/proposal queries use `(session_id, user_id)`.
 - `/users/me` is the normal user API; arbitrary user reads require
   `recommendation.user.read.any`.
@@ -797,7 +789,7 @@ token kind: service
 permission: auth.internal.permission-members.read
 ```
 
-Minimal revocation/eligibility rehydration:
+Token freshness state:
 
 ```text
 GET /internal/identity/accounts/{userId}/authorization-state
@@ -805,12 +797,12 @@ GET /internal/identity/accounts/{userId}/authorization-state
 audience:   cinx-auth-internal
 token kind: service
 permission: auth.internal.authorization-state.read
-response:   userId, status, roles, authorizationVersion,
-            authorizationPolicyVersion, evaluatedAt
+response:   userId, status, changedAt, evaluatedAt
 ```
 
-Callers use this only to restore/verify their bounded local projection. It is
-not an endpoint for enumerating users or delegating role management.
+Callers use this only to check a token against the user's last authorization
+change (section 18). It is not an endpoint for enumerating users or delegating
+role management.
 
 ## 14. WebSocket authentication and authorization
 
@@ -819,7 +811,7 @@ Notification WebSocket MUST:
 - use configured allowed origins, never `"*"`;
 - require a bearer token in STOMP `CONNECT`;
 - reject missing, invalid or expired tokens;
-- use `CinxJwtAuthenticationConverter` so principal equals `uid`;
+- use `CinxJwtAuthenticationConverter` so principal equals `sub`;
 - permit subscription only to `/user/queue/notifications`;
 - deny direct subscription to broker `/queue/**` and `/topic/**`;
 - deny arbitrary client `SEND` to broker destinations;
@@ -850,32 +842,20 @@ Payment/billing callbacks are not user operations:
 Never protect a webhook with `ROLE_ADMIN` or treat knowledge of order ID and
 amount as authentication.
 
-## 16. Auth persistence and reconciliation
+## 16. Auth persistence and admin commands
 
-Target tables:
+Auth is a thin admin layer over Keycloak. Roles live in Keycloak realm roles;
+auth stores only status, ban state and the time of the last change.
 
 ```text
 identity_account
-  user_id PK
-  keycloak_subject UNIQUE
-  email
-  status
-  sync_status
-  authorization_version BIGINT
+  user_id PK                 Keycloak sub
+  status                     ACTIVE | BANNED
+  changed_at nullable        last role/status change
+  ban fields                 reason, type, banned_at, ban_expires_at
   created_at
   updated_at
   version
-
-identity_account_role
-  user_id FK
-  role_code
-  granted_by
-  granted_at
-  expires_at nullable
-  status                    ACTIVE | REVOKED | EXPIRED
-  revoked_at nullable
-  source
-  PRIMARY KEY (user_id, role_code)
 
 authorization_audit
   id
@@ -890,92 +870,35 @@ authorization_audit
   request_id
   trace_id
   occurred_at
-
-authorization_grant_request
-  id
-  target_user_id
-  role_code
-  status
-  requested_by
-  approved_by nullable
-  reason
-  incident_reference nullable
-  requested_expires_at nullable
-  active_slot nullable       1 while pending, null after terminal
-  decided_at nullable
-  created_at
-  UNIQUE (target_user_id, role_code, active_slot)
-
-keycloak_sync_job
-  id
-  user_id
-  desired_authorization_version
-  status
-  attempt_count
-  next_attempt_at
-  last_error_code
-  created_at
-  updated_at
-  UNIQUE (user_id, desired_authorization_version)
 ```
 
-Two-person `PLATFORM_ADMIN`/`BREAK_GLASS_ADMIN` grants become effective only
-when `requested_by != approved_by`, both actors satisfy delegation policy and
-the requested expiry is within the catalog maximum. Approval, effective grant,
-audit, version increment, sync job and outbox row share one transaction.
+A row is created lazily on the first admin action or instructor event for a
+user, never at onboarding. There is no role table, sync-job table,
+authorization version, reconciler or session revocation.
 
-Every effective-role calculation, permission-members query and reconciliation
-uses the same injected-`Clock` predicate:
+A role/status command (`IdentityService`):
 
-```text
-status = ACTIVE AND (expires_at IS NULL OR now < expires_at)
-```
+1. Locks or creates the account row.
+2. Calls Keycloak synchronously through the admin API (`KeycloakAdminClient`):
+   role add/remove, or `enabled=false` on suspend/ban and `enabled=true` on
+   reactivate. A Keycloak failure fails the command and nothing is committed.
+3. In the same DB transaction sets `identity_account.changed_at`, writes the
+   `authorization_audit` row and enqueues the `auth.authorization.changed`
+   outbox event.
 
-Therefore a grant is not effective after its deadline even if the materializing
-worker is delayed. Index active grants by `expires_at`. A bounded,
-`Clock`-driven expiry worker:
+A disabled Keycloak user cannot sign in or refresh. A role change reaches a
+user's next token through the freshness check in section 18.
 
-1. Claims indexed due grants in bounded batches and locks the affected account
-   and grant rows, using skip-locked/equivalent semantics where supported.
-2. Rechecks status and deadline under the lock.
-3. Changes each still-due `ACTIVE` grant to `EXPIRED`; it never deletes it.
-4. Increments `authorization_version` exactly once for the affected user batch.
-5. Writes an audit record for every expired grant.
-6. Writes the desired Keycloak sync job and full authorization outbox snapshot
-   in the same transaction.
-7. Uses the high-priority post-commit path to revoke sessions and propagate the
-   required denial/version state for privilege expiry.
-8. Retries with bounded backoff while preserving the due row and observable
-   failure state.
+`INSTRUCTOR` is added and removed from `user.instructor.verified` and
+`user.instructor.terminated`. Auth no longer consumes `user.profile.onboarded`
+and has no link endpoint. `PUT /api/v1/identity/accounts/{userId}/roles` takes
+`{roles, reason}` with no expiry, and rejects `LEARNER`, `INSTRUCTOR`,
+`PLATFORM_ADMIN` and `BREAK_GLASS_ADMIN`: those need a dedicated workflow. The
+two-person approval described in section 8 for the last two is not built yet.
 
-For any token containing a time-bound grant, auth projects the earliest grant
-expiry to Keycloak as `authz_not_after`. Gateway and resource servers enforce
-it, so a `BREAK_GLASS_ADMIN` token stops working at the exact grant deadline
-even if session revocation or the expiry worker is briefly delayed. A refresh
-cannot bypass the deadline; until reconciliation removes the expired role, a
-new token carries the same expired bound and fails closed.
-
-Do not make a remote Keycloak call the durability boundary of a DB
-transaction. A role/status command:
-
-1. Locks the account.
-2. Applies idempotent grant/revoke and increments `authorization_version`.
-3. Writes audit, Keycloak sync job and
-   `auth.authorization.changed` version 2 outbox row in the same transaction.
-4. The outbox relay publishes the committed desired authorization state; it
-   does not wait for Keycloak.
-5. A bounded-retry worker reconciles exact desired roles/status/`uid` to
-   Keycloak without touching built-in roles.
-6. On privilege reduction, the high-priority sync path revokes sessions.
-7. Failed sync jobs remain visible and alertable; a periodic reconciler detects
-   direct Keycloak drift.
-
-Admin commands SHOULD return `202 Accepted` with sync status when Keycloak has
-not yet converged.
-
-The authorization event represents committed auth-DB truth, not proof that
-Keycloak has already converged. Sensitive services use the status/version
-denial mechanism described below during that bounded convergence window.
+`GET /api/v1/identity/accounts/{userId}` returns
+`{userId, email, status, roles, banExpiresAt, changedAt}`; email and roles are
+read from Keycloak.
 
 The legacy credential table in auth SHOULD be removed in the next migration;
 Keycloak is the only password/OTP owner.
@@ -992,7 +915,7 @@ Header:
 
 ```text
 eventType: AuthAuthorizationChanged
-eventVersion: 2
+eventVersion: 3
 aggregateType: IdentityAccount
 aggregateId: <userId>
 ```
@@ -1008,76 +931,63 @@ Payload:
     "learning.course.create",
     "learning.course.update.own"
   ],
-  "authorizationVersion": 7,
-  "authorizationPolicyVersion": 3,
-  "effectiveAt": "2026-07-31T10:00:00Z"
+  "changedAt": "2026-07-31T10:00:00Z"
 }
 ```
 
-Consumers use durable inbox processing and apply only a newer
-`authorizationVersion`. Notification recipient lookup moves from hard-coded
-`ADMIN` to capability-based membership, for example
+Auth announces only changes, so a consumer treats a user it never heard of as
+`ACTIVE`. Consumers use durable inbox processing and apply only a snapshot
+whose `changedAt` is newer than the stored one (commerce
+`SubscriptionLifecycleListener`, reporting `ReportingEventListener`).
+Notification recipient lookup uses capability-based membership, for example
 `learning.course.review.any`; notification preference remains a separate
-notification-owned filter.
+notification-owned filter. `/internal/identity/permissions/{permission}/user-ids`
+resolves the permission to catalog roles, then to the enabled Keycloak users
+holding each role directly.
 
-Commerce is also an authorized consumer of the full status/roles/version
-snapshot for plan eligibility. It checks that projection before creating
-provider state and again before activating an instructor-targeted plan. The
-projection is read-only commercial input: commerce never publishes a role
-command or treats payment as identity verification.
+Commerce is also an authorized consumer of the status/roles snapshot for plan
+eligibility. It checks that projection before creating provider state and
+again before activating an instructor-targeted plan. The projection is
+read-only commercial input: commerce never publishes a role command or treats
+payment as identity verification.
 
-When the canonical catalog changes without a user-role change, publishing the
-new policy version starts a durable affected-user reconciliation campaign. For
-each user whose effective permissions may change, auth locks the account,
-recalculates permissions, increments that user's `authorization_version` even
-though their role rows did not change, and writes audit, Keycloak sync work and
-a full authorization outbox snapshot. Consumers continue to order snapshots by
-the per-user `authorizationVersion`; `authorizationPolicyVersion` alone is
-never used to bypass that ordering rule.
+A catalog change alters effective permissions through the Keycloak realm
+composites. No campaign recalculates users; each user picks the change up on
+the next token, and a permission removal is visible to the user at the next
+renewal at the latest (token lifetime in section 6).
 
-Permission removal uses the mandatory privilege-reduction path: high-priority
-Keycloak reconciliation/session revocation plus the denial/version mechanism.
-Catalog publication is not operationally
-complete until every affected account has converged or is in an alertable retry
-state. Permission-members queries resolve only unexpired roles against the
-active catalog version; they do not query Keycloak as a second policy engine.
+## 18. Token freshness
 
-## 18. Token freshness and revocation
+Token freshness covers account suspension/ban and role changes. Auth records
+the time of each change in `identity_account.changed_at` and serves it from:
 
-Session revocation does not necessarily invalidate every copied bearer token
-immediately. CINX therefore chooses immediate bounded denial for privilege
-reduction; waiting for the five-minute JWT expiry is not an authorization
-boundary.
+```text
+GET /internal/identity/accounts/{userId}/authorization-state
+  -> {userId, status, changedAt, evaluatedAt}
+```
 
-This applies to account suspension/ban, role revoke, permission removal caused
-by a catalog change, and expiry/revoke of time-bound staff or break-glass
-grants. The service objective is denial at gateway/resource boundaries within
-five seconds of the committed auth-DB change, with latency measured and alerted.
+An unknown user is `ACTIVE` with `changedAt` null. The gateway
+(`AuthorizationFreshnessWebFilter`), Java resource servers
+(`AuthorizationFreshnessVerifier` and its filter in `common`) and the Python
+services (`recommendation/app/agent/auth.py`, `assistant/app/security/auth.py`)
+read this state, cached for at most five seconds, and allow a user token when:
 
-Required flow:
+```text
+status == ACTIVE AND (changedAt == null OR iat >= floor_to_second(changedAt))
+```
 
-1. Auth locks/mutates the account or grant and increments the per-user
-   `authorization_version`.
-2. Audit, high-priority revocation work, Keycloak sync work and the full auth
-   outbox snapshot commit atomically.
-3. The post-commit path revokes Keycloak sessions.
-4. Gateway and protected services consume account status/required version into
-   a bounded cache/projection and can rehydrate it through an authenticated
-   internal auth endpoint.
-5. Reject an inactive account, a token with `authz_ver` below the required
-   version, or a token past `authz_not_after`.
-6. A protected operation whose required-version state is stale/unavailable
-   performs the authenticated version check or fails closed; it never silently
-   falls back to token expiry.
-7. Permission increases do not invalidate a token; the user refreshes to obtain
-   the new permission set.
+Otherwise they answer `401 TOKEN_AUTHORIZATION_STALE`. `changedAt` is floored
+to the second because `iat` has whole seconds and the web retries a 401 only
+once after a silent renew (`TokenFreshness`). The web renews silently on that
+401 and obtains the new roles; a refresh-token grant re-runs the Keycloak
+protocol mappers. A banned user cannot renew, because the Keycloak user is
+disabled.
 
-Required-version cache freshness MUST be at most five seconds for the chosen
-SLO. Financial, identity-administration and break-glass operations SHOULD use a
-synchronous check when the projection cannot prove freshness. A stale token
-returns `401 TOKEN_AUTHORIZATION_STALE`; the SPA refreshes/re-authenticates, and
-a fresh token that no longer has the operation permission then receives the
-normal `403 PERMISSION_DENIED`.
+A protected operation whose state is stale or unavailable performs the
+authenticated state read or fails closed; it never silently falls back to
+token expiry. Permission increases do not invalidate a token; the user renews
+to obtain the new permission set. A fresh token that no longer has the
+operation permission receives the normal `403 PERMISSION_DENIED`.
 
 ## 19. HTTP failure semantics
 
@@ -1086,7 +996,7 @@ All HTTP failures use `application/problem+json`.
 | Situation | Status | Example code |
 |---|---:|---|
 | Missing, invalid or expired credential | 401 | `UNAUTHORIZED` |
-| Token authorization version is stale or account is inactive | 401 | `TOKEN_AUTHORIZATION_STALE` |
+| Token predates the last authorization change, or account is inactive | 401 | `TOKEN_AUTHORIZATION_STALE` |
 | Authenticated but missing permission | 403 | `PERMISSION_DENIED` |
 | Valid token but MFA level/freshness is insufficient | 403 | `MFA_STEP_UP_REQUIRED` |
 | Missing commercial feature | 403 | `FEATURE_NOT_ENTITLED` |
@@ -1132,14 +1042,12 @@ Metrics use bounded labels and MUST NOT use `userId` as a label:
 security_authentication_failures_total{service,reason}
 security_authorization_denials_total{service,permission,reason}
 service_token_rejections_total{service,caller,reason}
-authorization_sync_jobs_total{result}
-authorization_sync_drift_total{status}
 websocket_authentication_failures_total{reason}
 webhook_signature_failures_total{provider,reason}
 ```
 
-Alert on repeated wrong-audience service tokens, Keycloak drift, failed sync
-jobs, break-glass access and audit persistence failures.
+Alert on repeated wrong-audience service tokens, failed Keycloak admin calls,
+break-glass access and audit persistence failures.
 
 ## 21. Migration and implementation checklist
 
@@ -1147,18 +1055,20 @@ jobs, break-glass access and audit persistence failures.
 2. Add the canonical authorization catalog, then generate or semantically
    validate `cinx-api`, exact composite roles, service clients, target
    audiences and token mappers in the realm config.
-3. Add a new auth Flyway migration for multi-role, authorization version,
-   audit and sync jobs; do not edit applied migrations.
+3. Add a new auth Flyway migration for the status/`changed_at` account and
+   audit tables (`V4__keycloak_owned_roles.sql` drops the role and sync
+   tables); do not edit applied migrations.
 4. Remove `INSTRUCTOR_APPLICANT` from Keycloak roles and move application
    state to user.
-5. Replace single-role APIs with idempotent grant/revoke/reconcile operations.
+5. Replace single-role APIs with idempotent role-set operations that call
+   the Keycloak admin API.
 6. Extend `CinxJwtAuthenticationConverter` and all decoder validators.
 7. Add service-token filter chains and outbound OAuth2 clients.
 8. Replace `hasRole('ADMIN')` and role bypasses with permissions and policy
    checks.
 9. Secure Recommendation identity/session ownership.
 10. Secure WebSocket CONNECT and destinations.
-11. Add the authorization event v2 to AsyncAPI, producer, consumers and tests.
+11. Add the authorization event v3 to AsyncAPI, producer, consumers and tests.
 12. Reset/reimport the dev realm and recreate dev DBs after migrations. No
     backward-compatibility adapter is required because there is no release,
     but migration files already applied MUST remain unchanged.
@@ -1196,9 +1106,10 @@ wrong resource state         -> documented denial
 - Direct grant and implicit grant disabled.
 - Composite roles emit exact permission claims.
 - Service account emits only target-specific permissions/audience.
-- Auth reconciliation converges after transient Keycloak failure.
-- Privilege reduction revokes sessions.
-- Direct Keycloak drift is detected.
+- A role/status command fails as a whole when the Keycloak admin call fails.
+- Suspend disables the Keycloak user; reactivate enables it.
+- A token issued before `changed_at` (to the second) gets
+  `401 TOKEN_AUTHORIZATION_STALE`; a renewed token passes.
 
 ### Internal and WebSocket
 
@@ -1214,8 +1125,8 @@ Confirmed for v1:
 
 - frontend is a pure SPA using Authorization Code + PKCE and bearer access
   tokens;
-- privilege reduction uses the immediate required-version/status denial design
-  with a five-second service objective;
+- privilege reduction uses the status/`changedAt` token freshness check with a
+  five-second cache;
 - learner/instructor plan segmentation is purchase eligibility only and cannot
   grant an authorization role.
 

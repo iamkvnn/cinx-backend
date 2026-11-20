@@ -42,8 +42,8 @@ Mỗi phase là một hoặc vài PR nhỏ. Không gộp phase kế tiếp vào 
 
 - Chốt authorization catalog/realm configuration, issuer/audience/claims và service-client grant.
 - Hoàn thiện converter tại `common-security`; không giữ implementation song song trong `common`.
-- Thêm authorization/status version, `authz_not_after`, snapshot event và internal rehydration endpoint theo matrix.
-- Gateway/resource service deny token stale theo objective 5 giây.
+- Thêm `identity_account.changed_at`, event `auth.authorization.changed` v3 và endpoint internal `authorization-state` (status, changedAt) theo matrix.
+- Gateway/resource service deny token có `iat` trước `changedAt` (hoặc tài khoản không ACTIVE), cache tối đa 5 giây.
 
 Exit: token sai issuer/audience/kind/client/permission bị từ chối; mọi consumer converter được test; rehydration từ chối browser token; contract/producer/consumer thay đổi cùng nhau.
 

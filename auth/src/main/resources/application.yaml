@@ -55,6 +55,8 @@ eureka:
       defaultZone: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE}
 security:
   keycloak:
+    # auth writes roles and the enabled flag to Keycloak; false only where no Keycloak admin client exists
+    enabled: ${SECURITY_KEYCLOAK_ENABLED:true}
     issuer-uri: ${KEYCLOAK_ISSUER_URI}
     jwk-set-uri: ${KEYCLOAK_JWK_SET_URI}
     audience: ${KEYCLOAK_AUDIENCE}

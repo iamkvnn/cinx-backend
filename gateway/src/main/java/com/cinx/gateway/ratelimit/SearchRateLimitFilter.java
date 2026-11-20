@@ -31,7 +31,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Per-minute limit on the course search, the one anonymous route that costs an embedding per call (P1-01). A guest is
- * counted by an HMAC of their IP, never the IP itself, and a signed-in user by uid; keys live one window. When Redis
+ * counted by an HMAC of their IP, never the IP itself, and a signed-in user by sub; keys live one window. When Redis
  * fails the request passes: search staying up matters more than the limit.
  */
 @Component
@@ -143,8 +143,7 @@ public class SearchRateLimitFilter implements GlobalFilter, Ordered {
     }
 
     private static String userId(JwtAuthenticationToken authentication) {
-        String uid = authentication.getToken().getClaimAsString("uid");
-        return uid == null || uid.isBlank() ? authentication.getToken().getSubject() : uid;
+        return authentication.getToken().getSubject();
     }
 
     private void warnAtMostOncePerMinute(long now, Throwable failure) {

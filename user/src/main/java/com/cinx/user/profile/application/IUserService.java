@@ -29,6 +29,7 @@ public interface IUserService {
     void updateLastAccess(String userId);
     List<UserView> findByIds(List<String> ids);
     void updatePreferredCategories(String userId, List<String> categoryIds);
+    UserView updateEffects(String userId, boolean enabled);
     UserView onboardProfile(String userId, String keycloakSubject, String email, AccountType accountType, OnboardProfileCommand command);
     UserView onboardProfile(String userId, String keycloakSubject, String email, AccountType accountType,
                             OnboardProfileCommand command, String idempotencyKey);

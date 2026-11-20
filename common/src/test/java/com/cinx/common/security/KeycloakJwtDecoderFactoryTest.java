@@ -76,8 +76,8 @@ class KeycloakJwtDecoderFactoryTest {
     @Test
     void acceptsValidImportedOrNewKeycloakToken() throws Exception {
         var decoder = KeycloakJwtDecoderFactory.create("https://id.cinx.test/realms/cinx", jwksUri, "cinx-api");
-        assertEquals("legacy-uid", decoder.decode(token(signingKey, "https://id.cinx.test/realms/cinx",
-                List.of("cinx-api"), Instant.now().plusSeconds(300))).getClaimAsString("uid"));
+        assertEquals("keycloak-subject", decoder.decode(token(signingKey, "https://id.cinx.test/realms/cinx",
+                List.of("cinx-api"), Instant.now().plusSeconds(300))).getSubject());
     }
 
     @Test
@@ -101,7 +101,6 @@ class KeycloakJwtDecoderFactoryTest {
                         .issuer(issuer)
                         .subject("keycloak-subject")
                         .audience(audience)
-                        .claim("uid", "legacy-uid")
                         .claim("token_kind", "user")
                         .issueTime(Date.from(now.minusSeconds(1)))
                         .expirationTime(Date.from(expiresAt))

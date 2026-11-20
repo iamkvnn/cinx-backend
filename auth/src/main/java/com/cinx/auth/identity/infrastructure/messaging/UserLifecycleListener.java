@@ -4,7 +4,6 @@ import com.cinx.auth.identity.application.IIdentityService;
 import com.cinx.auth.identity.infrastructure.persistence.AuthEventInbox;
 import com.cinx.auth.identity.infrastructure.persistence.AuthEventInboxRepository;
 
-import com.cinx.auth.identity.application.command.LinkIdentityCommand;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -37,11 +36,6 @@ public class UserLifecycleListener {
                 .processedAt(LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC)).build());
         String userId = required(event, "userId");
         switch (routingKey) {
-            case "user.profile.onboarded" -> identityService.link(
-                    userId,
-                    new LinkIdentityCommand(
-                            required(event, "keycloakSubject"),
-                            nullable(event, "email")));
             case "user.instructor.verified" -> identityService.promoteInstructor(userId);
             case "user.instructor.terminated" -> identityService.terminateInstructor(userId);
             default -> log.warn("Ignoring unsupported user lifecycle event routingKey={}", routingKey);
