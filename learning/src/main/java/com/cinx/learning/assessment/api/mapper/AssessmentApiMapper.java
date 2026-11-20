@@ -1,0 +1,71 @@
+package com.cinx.learning.assessment.api.mapper;
+
+import com.cinx.learning.assessment.api.dto.request.ChooseQuizAnswerRequest;
+import com.cinx.learning.assessment.api.dto.request.CreateAssignmentSubmissionRequest;
+import com.cinx.learning.assessment.api.dto.request.GradeEssayRequest;
+import com.cinx.learning.assessment.api.dto.request.GradeSubmissionRequest;
+import com.cinx.learning.assessment.api.dto.request.LineCommentRequest;
+import com.cinx.learning.assessment.api.dto.request.SaveCriteriaRequest;
+import com.cinx.learning.assessment.api.dto.request.SubmitQuizSessionRequest;
+import com.cinx.learning.assessment.api.dto.request.SubmitVideoQuestionRequest;
+import com.cinx.learning.assessment.api.dto.response.AssignmentGradingResponse;
+import com.cinx.learning.assessment.api.dto.response.AssignmentSubmissionAttachmentResponse;
+import com.cinx.learning.assessment.api.dto.response.AssignmentSubmissionResponse;
+import com.cinx.learning.assessment.api.dto.response.InVideoAssessmentSubmissionResponse;
+import com.cinx.learning.assessment.api.dto.response.QuizQuestionAnalyticsResponse;
+import com.cinx.learning.assessment.api.dto.response.QuizSessionOptionResponse;
+import com.cinx.learning.assessment.api.dto.response.QuizSessionQuestionResponse;
+import com.cinx.learning.assessment.api.dto.response.QuizSessionResponse;
+import com.cinx.learning.assessment.api.dto.response.QuizSessionSubmissionResponse;
+import com.cinx.learning.assessment.application.command.ChooseQuizAnswerCommand;
+import com.cinx.learning.assessment.application.command.CreateAssignmentSubmissionCommand;
+import com.cinx.learning.assessment.application.command.GradeEssayCommand;
+import com.cinx.learning.assessment.application.command.GradeSubmissionCommand;
+import com.cinx.learning.assessment.application.command.LineCommentCommand;
+import com.cinx.learning.assessment.application.command.SaveCriteriaCommand;
+import com.cinx.learning.assessment.application.command.SubmitQuizSessionCommand;
+import com.cinx.learning.assessment.application.command.SubmitVideoQuestionCommand;
+import com.cinx.learning.assessment.application.query.AssignmentGradingView;
+import com.cinx.learning.assessment.application.query.AssignmentSubmissionAttachmentView;
+import com.cinx.learning.assessment.application.query.AssignmentSubmissionView;
+import com.cinx.learning.assessment.application.query.InVideoAssessmentSubmissionView;
+import com.cinx.learning.assessment.application.query.QuizQuestionAnalyticsView;
+import com.cinx.learning.assessment.application.query.QuizSessionOptionView;
+import com.cinx.learning.assessment.application.query.QuizSessionQuestionView;
+import com.cinx.learning.assessment.application.query.QuizSessionSubmissionView;
+import com.cinx.learning.assessment.application.query.QuizSessionView;
+import org.mapstruct.Mapper;
+
+/** Converts the api's transport types to the application's commands and the application's views to transport types. */
+@Mapper(componentModel = "spring")
+public interface AssessmentApiMapper {
+    AssignmentGradingResponse toResponse(AssignmentGradingView view);
+    AssignmentSubmissionAttachmentResponse toResponse(AssignmentSubmissionAttachmentView view);
+    AssignmentSubmissionResponse toResponse(AssignmentSubmissionView view);
+    ChooseQuizAnswerCommand toCommand(ChooseQuizAnswerRequest request);
+    CreateAssignmentSubmissionCommand toCommand(CreateAssignmentSubmissionRequest request);
+    GradeEssayCommand toCommand(GradeEssayRequest request);
+    GradeSubmissionCommand toCommand(GradeSubmissionRequest request);
+    InVideoAssessmentSubmissionResponse toResponse(InVideoAssessmentSubmissionView view);
+    LineCommentCommand toCommand(LineCommentRequest request);
+    QuizQuestionAnalyticsResponse toResponse(QuizQuestionAnalyticsView view);
+    QuizSessionOptionResponse toResponse(QuizSessionOptionView view);
+    QuizSessionQuestionResponse toResponse(QuizSessionQuestionView view);
+    QuizSessionResponse toResponse(QuizSessionView view);
+    QuizSessionSubmissionResponse toResponse(QuizSessionSubmissionView view);
+    SaveCriteriaCommand toCommand(SaveCriteriaRequest request);
+    SubmitQuizSessionCommand toCommand(SubmitQuizSessionRequest request);
+    SubmitVideoQuestionCommand toCommand(SubmitVideoQuestionRequest request);
+    com.cinx.learning.assessment.api.dto.response.AssignmentGradingResponse.Criterion toResponse(com.cinx.learning.assessment.application.query.AssignmentGradingView.Criterion view);
+    com.cinx.learning.assessment.api.dto.response.AssignmentGradingResponse.Submission toResponse(com.cinx.learning.assessment.application.query.AssignmentGradingView.Submission view);
+    com.cinx.learning.assessment.api.dto.response.AssignmentGradingResponse.Attachment toResponse(com.cinx.learning.assessment.application.query.AssignmentGradingView.Attachment view);
+    com.cinx.learning.assessment.api.dto.response.AssignmentGradingResponse.CriterionScore toResponse(com.cinx.learning.assessment.application.query.AssignmentGradingView.CriterionScore view);
+    com.cinx.learning.assessment.api.dto.response.AssignmentGradingResponse.Adjustment toResponse(com.cinx.learning.assessment.application.query.AssignmentGradingView.Adjustment view);
+    com.cinx.learning.assessment.api.dto.response.AssignmentGradingResponse.LineComment toResponse(com.cinx.learning.assessment.application.query.AssignmentGradingView.LineComment view);
+    com.cinx.learning.assessment.api.dto.response.AssignmentGradingResponse.AttachmentText toResponse(com.cinx.learning.assessment.application.query.AssignmentGradingView.AttachmentText view);
+    com.cinx.learning.assessment.application.command.CreateAssignmentSubmissionCommand.AttachmentRequest toCommand(com.cinx.learning.assessment.api.dto.request.CreateAssignmentSubmissionRequest.AttachmentRequest request);
+    com.cinx.learning.assessment.application.command.GradeEssayCommand.EssayQuestionScore toCommand(com.cinx.learning.assessment.api.dto.request.GradeEssayRequest.EssayQuestionScore request);
+    com.cinx.learning.assessment.application.command.GradeSubmissionCommand.CriterionScoreInput toCommand(com.cinx.learning.assessment.api.dto.request.GradeSubmissionRequest.CriterionScoreInput request);
+    com.cinx.learning.assessment.application.command.GradeSubmissionCommand.AdjustmentInput toCommand(com.cinx.learning.assessment.api.dto.request.GradeSubmissionRequest.AdjustmentInput request);
+    com.cinx.learning.assessment.application.command.SaveCriteriaCommand.CriterionInput toCommand(com.cinx.learning.assessment.api.dto.request.SaveCriteriaRequest.CriterionInput request);
+}

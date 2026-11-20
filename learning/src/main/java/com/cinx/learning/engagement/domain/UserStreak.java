@@ -1,6 +1,7 @@
 package com.cinx.learning.engagement.domain;
 
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -18,4 +19,9 @@ public class UserStreak extends Model {
     private Integer currentStreak;
     private Integer highestStreak;
     private LocalDate lastActivityDate;
+    /** The highest milestone (7, 30, 100) already celebrated in this run of the streak; 0 when none. */
+    @Builder.Default
+    private Integer celebratedMilestone = 0;
+    /** The last active day of a broken streak whose loss was already shown. */
+    private LocalDate lostNoticedOn;
 }
