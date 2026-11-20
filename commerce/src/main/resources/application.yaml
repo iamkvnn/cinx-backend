@@ -1,0 +1,79 @@
+spring:
+  application:
+    name: commerce
+  datasource:
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+  rabbitmq:
+    host: ${RABBITMQ_HOST}
+    port: ${RABBITMQ_PORT}
+    username: ${RABBITMQ_USERNAME}
+    password: ${RABBITMQ_PASSWORD}
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    # A message that still fails after the retries goes to its queue's DLQ instead of being requeued forever.
+    listener:
+      simple:
+        default-requeue-rejected: false
+        retry:
+          enabled: true
+          max-attempts: 5
+          initial-interval: 1000
+          multiplier: 2.0
+          max-interval: 10000
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE}
+security:
+  keycloak:
+    issuer-uri: ${KEYCLOAK_ISSUER_URI}
+    jwk-set-uri: ${KEYCLOAK_JWK_SET_URI}
+    audience: ${KEYCLOAK_AUDIENCE}
+server:
+  port: 8087
+cinx:
+  commerce:
+    # Platform share of a course sale, in percent; each order line keeps the value in force when it was sold.
+    platform-fee-percent: ${CINX_PLATFORM_FEE_PERCENT:30}
+  subscription:
+    billing-enabled: ${CINX_SUBSCRIPTION_BILLING_ENABLED:false}
+    provider: ${CINX_SUBSCRIPTION_PROVIDER:NONE}
+  entitlement:
+    publication-enabled: ${CINX_ENTITLEMENT_PUBLICATION_ENABLED:false}
+  payment:
+    # Where a gateway sends the browser back to, and the public address it posts its server notices to (the gateway).
+    frontend-base-url: ${CINX_PAYMENT_FRONTEND_BASE_URL:http://localhost:5174}
+    public-base-url: ${CINX_PAYMENT_PUBLIC_BASE_URL:http://localhost:9090}
+  security:
+    authorization-freshness:
+      enabled: true
+      auth-base-url: ${AUTH_INTERNAL_BASE_URL:http://auth:8888}
+      token-uri: ${KEYCLOAK_SERVICE_TOKEN_URI:http://keycloak:8080/realms/cinx/protocol/openid-connect/token}
+      client-id: ${SERVICE_CLIENT_ID:cinx-commerce-service}
+      client-secret: ${CINX_COMMERCE_SERVICE_CLIENT_SECRET:}
+      maximum-age: PT5S
+stripe:
+  secret-key: ${STRIPE_SECRET_KEY:}
+  webhook-secret: ${STRIPE_WEBHOOK_SECRET:}
+  webhook-tolerance-seconds: ${STRIPE_WEBHOOK_TOLERANCE_SECONDS:300}
+  api-version: ${STRIPE_API_VERSION:2024-06-20}
+  api-base-url: ${STRIPE_API_BASE_URL:https://api.stripe.com}
+  # signing secret of the course-order webhook endpoint, which Stripe issues separately from the billing one
+  order-webhook-secret: ${STRIPE_ORDER_WEBHOOK_SECRET:}
+# A gateway whose keys are empty is not offered on the order page.
+momo:
+  partner-code: ${MOMO_PARTNER_CODE:}
+  access-key: ${MOMO_ACCESS_KEY:}
+  secret-key: ${MOMO_SECRET_KEY:}
+  api-base-url: ${MOMO_API_BASE_URL:https://test-payment.momo.vn}
+vnpay:
+  tmn-code: ${VNPAY_TMN_CODE:}
+  hash-secret: ${VNPAY_HASH_SECRET:}
+  pay-url: ${VNPAY_PAY_URL:https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}

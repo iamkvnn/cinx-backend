@@ -1,0 +1,31 @@
+spring:
+  config:
+    import: optional:file:../env/local.env[.properties]
+  datasource:
+    url: jdbc:mysql://localhost:${MYSQL_PORT:3300}/commercedb
+    username: root
+    password: ${MYSQL_ROOT_PASSWORD:}
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+  # registered as localhost, so a laptop that changes networks does not leave the registry on an old IP
+  instance:
+    hostname: localhost
+    prefer-ip-address: false
+security:
+  keycloak:
+    issuer-uri: http://localhost:8180/realms/cinx
+    jwk-set-uri: http://localhost:8180/realms/cinx/protocol/openid-connect/certs
+    audience: cinx-api
+cinx:
+  security:
+    authorization-freshness:
+      # on the host, Keycloak and auth answer on localhost; application.yaml defaults to their Docker names
+      auth-base-url: ${AUTH_INTERNAL_BASE_URL:http://localhost:8888}
+      token-uri: ${KEYCLOAK_SERVICE_TOKEN_URI:http://localhost:8180/realms/cinx/protocol/openid-connect/token}
