@@ -1,6 +1,7 @@
 $schema: ./authorization-matrix.schema.json
 schemaVersion: "1.0"
-status: proposed
+# Implemented except two-person approval for PLATFORM_ADMIN/BREAK_GLASS_ADMIN grants and detection of manual Keycloak role edits.
+status: active
 lastReviewed: "2026-07-31"
 owners:
   securityModel: auth
@@ -203,36 +204,6 @@ operations:
       quota: null
     audit: security
 
-  - id: auth.authorization-state-internal
-    owner: auth
-    transport: http
-    exposure: internal
-    routes:
-      - method: GET
-        path: /internal/identity/accounts/{userId}/authorization-state
-    authentication:
-      required: true
-      tokenKind: service
-      audiences: [cinx-auth-internal]
-      allowedClients:
-        - cinx-gateway-service
-        - cinx-user-service
-        - cinx-commerce-service
-        - cinx-learning-service
-        - cinx-notification-service
-        - cinx-reporting-service
-        - cinx-recommendation-service
-        - cinx-assistant-service
-    authorization:
-      permissionsAll: [auth.internal.authorization-state.read]
-      relationship: null
-      attributes:
-        - response is the minimal status, roles and monotonic authorization version for one user
-        - caller uses it only for revocation or plan-eligibility projection rehydration
-      entitlement: null
-      quota: null
-    audit: security
-
   - id: user.profile-onboard-self
     owner: user
     transport: http
@@ -420,12 +391,77 @@ operations:
       allowedClients:
         - cinx-learning-service
         - cinx-notification-service
+        - cinx-campus-service
     authorization:
       permissionsAll: [user.internal.profile.read]
       relationship: null
       attributes:
         - response fields follow the caller-specific internal contract
         - instructor-lookup answers one verified, non-terminated instructor for an exact email, else 404 (no directory)
+      entitlement: null
+      quota: null
+    audit: service
+
+  - id: user.friends-self
+    owner: user
+    transport: http
+    exposure: user
+    routes:
+      - method: GET
+        path: /api/v1/users/me/friends
+      - method: GET
+        path: /api/v1/users/me/friends/relations
+      - method: DELETE
+        path: /api/v1/users/me/friends/{userId}
+      - method: GET
+        path: /api/v1/users/me/friend-requests
+      - method: POST
+        path: /api/v1/users/me/friend-requests
+      - method: POST
+        path: /api/v1/users/me/friend-requests/{requestId}/accept
+      - method: POST
+        path: /api/v1/users/me/friend-requests/{requestId}/decline
+      - method: DELETE
+        path: /api/v1/users/me/friend-requests/{requestId}
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api]
+    authorization:
+      permissionsAny: [user.profile.read.self, user.profile.update.self]
+      relationship: self
+      attributes:
+        - GETs need user.profile.read.self; every change needs user.profile.update.self; the caller is always the JWT subject
+        - only the recipient accepts or declines and only the sender cancels; another user's request id answers 404
+        - 400 self; 404 unknown user; 409 already friends, already pending, or declined by that user less than 30 days ago; 409 FRIEND_LIMIT at 500 friends on either side (also on accept)
+        - a decline and an unfriend are silent; asking someone who already asked accepts their request
+      entitlement: null
+      quota:
+        type: rate-limit
+        units: new friend requests per sender, whatever became of them
+        limit: 20
+        window: PT24H
+      quotaFailureCode: QUOTA_EXCEEDED
+    audit: none
+
+  - id: user.friends-read-internal
+    owner: user
+    transport: http
+    exposure: internal
+    routes:
+      - method: GET
+        path: /internal/users/{userId}/friends
+    authentication:
+      required: true
+      tokenKind: service
+      audiences: [cinx-user-internal]
+      allowedClients:
+        - cinx-campus-service
+    authorization:
+      permissionsAll: [user.internal.friends.read]
+      relationship: null
+      attributes:
+        - answers friend ids only, for the campus friends-online list; names and places stay with their owners
       entitlement: null
       quota: null
     audit: service
@@ -2172,6 +2208,98 @@ operations:
       quota: null
     audit: service
 
+  - id: learning.course-review-read-internal
+    owner: learning
+    transport: http
+    exposure: internal
+    routes:
+      - method: GET
+        path: /internal/courses/{id}/review-snapshot
+    authentication:
+      required: true
+      tokenKind: service
+      audiences: [cinx-learning-internal]
+      allowedClients:
+        - cinx-assistant-service
+    authorization:
+      permissionsAll: [learning.internal.course-review.read]
+      relationship: null
+      attributes:
+        - read-only; the submitted draft, curriculum, changes and readiness an admin reviewer reads, with the owner id and no email
+        - the assistant calls it in the background when course.approval.requested arrives; approving and rejecting stay on the MFA-gated admin endpoints
+      entitlement: null
+      quota: null
+    audit: service
+
+  - id: learning.qna-read-internal
+    owner: learning
+    transport: http
+    exposure: internal
+    routes:
+      - method: GET
+        path: /internal/qna/questions/{id}
+    authentication:
+      required: true
+      tokenKind: service
+      audiences: [cinx-learning-internal]
+      allowedClients:
+        - cinx-assistant-service
+    authorization:
+      permissionsAll: [learning.internal.qna.read]
+      relationship: null
+      attributes:
+        - read-only; title, text, course and lesson of one question, whether an instructor answered, and the course owner id; no asker identity
+        - the assistant calls it in the background when question.created arrives; posting an answer stays the instructor's own call
+      entitlement: null
+      quota: null
+    audit: service
+
+  - id: learning.grading-read-internal
+    owner: learning
+    transport: http
+    exposure: internal
+    routes:
+      - method: GET
+        path: /internal/assessments/submissions/{id}/grading-snapshot
+    authentication:
+      required: true
+      tokenKind: service
+      audiences: [cinx-learning-internal]
+      allowedClients:
+        - cinx-assistant-service
+    authorization:
+      permissionsAll: [learning.internal.grading.read]
+      relationship: null
+      attributes:
+        - read-only; the assignment, its rubric, the submission text and readable attachments, the course owner id; no learner identity
+        - the assistant calls it in the background when assignment.submission.created arrives and both gates are on; saving a grade stays the instructor's own call
+      entitlement: null
+      quota: null
+    audit: service
+
+  - id: learning.lab-bundle-read-internal
+    owner: learning
+    transport: http
+    exposure: internal
+    routes:
+      - method: GET
+        path: /internal/labs/releases/{releaseId}/bundle
+    authentication:
+      required: true
+      tokenKind: service
+      audiences: [cinx-learning-internal]
+      allowedClients:
+        - cinx-runner-service
+    authorization:
+      permissionsAll: [learning.internal.lab.read]
+      relationship: null
+      attributes:
+        - read-only; one release or check snapshot of a LAB lesson with every test case, hidden ones and their expected outputs included
+        - only the runner reads it, to grade an attempt it received on learning.lab.run.requested; no learner or instructor identity
+      entitlement: null
+      quota: null
+    audit: service
+
   - id: reporting.overview-read-internal
     owner: reporting
     transport: http
@@ -2632,14 +2760,14 @@ operations:
         - tools call domain services with a token exchanged for that service, never the caller's own token
         - access needs AI credits left; recommendation.agent.advanced is not checked (Learner Free has it off but has credits)
         - each capability also has a daily turn cap that guards against abuse
-        - an instructor placement spends assistant.instructor.credits instead of the learner credits
+        - every placement (learner, lesson, instructor) spends the one CozX pool, assistant.credits
         - an admin placement is not metered (no credits, no daily cap, plan GĐ3-a); every admin tool call is written to admin_tool_audit
         - admin tools that read MFA-gated data (reports, reporting) require the caller's own fresh MFA, then read through /internal
         - an optional tutor mode (EXPLAIN, GIVE_HINT, CHECK_UNDERSTANDING) is accepted only with placement lesson_player (else 400 MODE_NOT_ALLOWED) and pins learner.lesson_tutor
       entitlement: null
       quota:
         type: reservation
-        quotaKey: recommendation.agent.requests
+        quotaKey: assistant.credits
         units: credits (1,000 tokens weighted per model), metered from real model usage
         reserveBeforeSideEffect: true
         commitOnSuccess: true
@@ -2764,15 +2892,45 @@ operations:
         - learning confirms the caller is an editor, manager or owner of the course (GET /api/v1/learning/instructor/courses/{id}) before anything is read or written
         - a material is a file uploaded through learning's course presigned URL; its text is indexed for that course only
         - a practice job proposes quiz.add_question actions in its own session; nothing reaches the quiz until each is approved
-        - practice jobs spend assistant.instructor.credits; when they run out the job stops and keeps what it made
+        - practice jobs spend assistant.credits; when they run out the job stops and keeps what it made
       entitlement: null
       quota:
         type: reservation
-        quotaKey: assistant.instructor.credits
+        quotaKey: assistant.credits
         units: server-calculated
         reserveBeforeSideEffect: true
         commitOnSuccess: true
         releaseOnSafeFailure: true
+    concealUnauthorizedResource: true
+    audit: security
+
+  - id: assistant.suggestions
+    owner: assistant
+    transport: http
+    exposure: user
+    routes:
+      - method: GET
+        path: /api/v1/assistant/suggestions
+      - method: POST
+        path: /api/v1/assistant/suggestions/{suggestionId}/outcome
+      - method: GET
+        path: /api/v1/assistant/automation-settings
+      - method: PUT
+        path: /api/v1/assistant/automation-settings
+    authentication:
+      required: true
+      tokenKind: user
+      audiences: [cinx-api, cinx-assistant]
+    authorization:
+      permissionsAny: [learning.course.review.any, assistant.agent.use.instructor]
+      relationship: course-instructor-unless-any
+      attributes:
+        - a suggestion is made in the background from a domain event; reading one never runs a model and never spends a quota
+        - a course check is read with learning.course.review.any; a Q&A draft or grading suggestion by an editor, manager or owner of its course, confirmed by learning (GET /api/v1/learning/instructor/courses/{id})
+        - an ASSIGNMENT switch also needs learning to answer the caller's GET /api/v1/assessments/assignments/{lessonId}/grading, so no one switches another course's assignment
+        - the outcome (ACCEPTED, EDITED, DISMISSED) only labels the suggestion; the business write stays the person's own call on the owning service
+      entitlement: null
+      quota: null
     concealUnauthorizedResource: true
     audit: security
 

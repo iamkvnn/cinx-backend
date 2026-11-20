@@ -2,7 +2,7 @@ package com.cinx.auth.identity.application;
 
 import com.cinx.auth.identity.application.command.BanUserCommand;
 import com.cinx.auth.identity.application.command.UpdateStaffRolesCommand;
-import com.cinx.auth.identity.application.query.AuthorizationState;
+import com.cinx.auth.identity.application.event.AuthorizationChanged;
 import com.cinx.auth.identity.application.query.IdentityAccountView;
 import com.cinx.auth.identity.domain.AuthorizationRole;
 import com.cinx.auth.identity.domain.IdentityAccount;
@@ -15,6 +15,7 @@ import com.cinx.common.logging.CorrelationContext;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,7 +31,8 @@ import java.util.UUID;
 
 /**
  * Keycloak owns roles; this service changes them there synchronously, then records the change (status, audit, event)
- * in the same transaction. A Keycloak failure throws before anything is stored.
+ * in the same transaction. A Keycloak failure throws before anything is stored. Once the transaction commits, the
+ * gateway learns of the change through {@link AuthorizationChanged}.
  */
 @Service
 @RequiredArgsConstructor
@@ -45,6 +47,7 @@ public class IdentityService implements IIdentityService {
     private final IdentityEvents events;
     private final AuthorizationCatalog catalog;
     private final Clock clock;
+    private final ApplicationEventPublisher publisher;
 
     @Override
     @Transactional(readOnly = true)
@@ -58,6 +61,7 @@ public class IdentityService implements IIdentityService {
     @Override
     @Transactional
     public IdentityAccountView ban(String userId, BanUserCommand command) {
+        requireAllowedDuration(command);
         IdentityAccount account = lockOrCreate(userId);
         keycloak.setEnabled(userId, false);
         account.setStatus(IdentityStatus.BANNED);
@@ -72,11 +76,26 @@ public class IdentityService implements IIdentityService {
     public IdentityAccountView unban(String userId) {
         IdentityAccount account = lockOrCreate(userId);
         keycloak.setEnabled(userId, true);
-        account.setStatus(IdentityStatus.ACTIVE);
-        account.setBanReason(null);
-        account.setBanDetails(null);
-        account.setBanExpiresAt(null);
+        clearBan(account);
         return persistChange(account, "ACCOUNT_REACTIVATED", null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<String> findExpiredBans(int limit) {
+        return accounts.findExpiredBans(now(), limit);
+    }
+
+    @Override
+    @Transactional
+    public void liftExpiredBan(String userId) {
+        // an operator may have reactivated or re-banned the user since the job listed them
+        IdentityAccount account = accounts.lockById(userId).orElse(null);
+        if (account == null || account.getStatus() != IdentityStatus.BANNED
+                || account.getBanExpiresAt() == null || account.getBanExpiresAt().isAfter(now())) return;
+        keycloak.setEnabled(userId, true);
+        clearBan(account);
+        persistChange(account, "BAN_EXPIRED", null);
     }
 
     @Override
@@ -95,15 +114,6 @@ public class IdentityService implements IIdentityService {
         if (!keycloak.directRoles(userId).contains(AuthorizationRole.INSTRUCTOR)) return currentView(account);
         keycloak.removeRoles(userId, Set.of(AuthorizationRole.INSTRUCTOR));
         return persistChange(account, "ROLE_REVOKED", AuthorizationRole.INSTRUCTOR);
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public AuthorizationState authorizationState(String userId) {
-        IdentityAccount account = accounts.findById(userId).orElse(null);
-        if (account == null) return new AuthorizationState(userId, IdentityStatus.ACTIVE, null, clock.instant());
-        return new AuthorizationState(userId, account.getStatus(),
-                account.getChangedAt() == null ? null : account.getChangedAt().toInstant(ZoneOffset.UTC), clock.instant());
     }
 
     @Override
@@ -150,6 +160,8 @@ public class IdentityService implements IIdentityService {
                 role == null ? null : role.name(), snapshot(account, effective), catalog.policyVersion(),
                 CorrelationContext.currentRequestId(), now()));
         events.authorizationChanged(account, effective);
+        publisher.publishEvent(new AuthorizationChanged(account.getUserId(), account.getStatus(),
+                account.getChangedAt().toInstant(ZoneOffset.UTC)));
         return toView(account, emailOf(account.getUserId()), effective);
     }
 
@@ -162,6 +174,24 @@ public class IdentityService implements IIdentityService {
         } catch (JsonProcessingException impossible) {
             throw new IllegalStateException("Unable to serialize authorization audit snapshot", impossible);
         }
+    }
+
+    /** A reason with a maximum needs 1 to that many days; only a reason without one may be indefinite. */
+    private static void requireAllowedDuration(BanUserCommand command) {
+        Integer max = command.reasonType().getMaxDurationDays();
+        Integer days = command.durationDays();
+        if (days == null ? max != null : days < 1 || (max != null && days > max)) {
+            throw new BadRequestException(ErrorCode.BAD_REQUEST, max == null
+                    ? "Ban duration must be at least 1 day, or empty for an indefinite ban"
+                    : "A " + command.reasonType() + " ban lasts 1 to " + max + " days");
+        }
+    }
+
+    private static void clearBan(IdentityAccount account) {
+        account.setStatus(IdentityStatus.ACTIVE);
+        account.setBanReason(null);
+        account.setBanDetails(null);
+        account.setBanExpiresAt(null);
     }
 
     private LocalDateTime now() { return LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC); }

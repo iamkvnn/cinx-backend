@@ -25,6 +25,13 @@ spring:
           auth: true
           starttls:
             enable: true
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: ${REDIS_PORT:6379}
+      # a dead Redis must not hold an admin request open; the change is already committed
+      timeout: 500ms
+      connect-timeout: 500ms
   rabbitmq:
     host: ${RABBITMQ_HOST}
     port: ${RABBITMQ_PORT}
@@ -83,8 +90,12 @@ aws:
     secret-key: ${AWS_SECRET_KEY}
 server:
   port: 8888
-cinx:
-  security:
-    authorization-freshness:
-      # Auth is the authority: SecurityConfig wires its own in-process verifier, so common's HTTP one stays off.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+  health:
+    # Redis only speeds up revocation, so it being down must not mark auth down
+    redis:
       enabled: false

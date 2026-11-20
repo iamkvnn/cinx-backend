@@ -13,7 +13,7 @@ import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.ReactiveJwtAuthenticationConverterAdapter;
 import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.security.config.web.server.SecurityWebFiltersOrder;
-import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.data.redis.core.ReactiveStringRedisTemplate;
 import java.time.Clock;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.reactive.CorsConfigurationSource;
@@ -28,22 +28,12 @@ public class SecurityConfig {
     private String keycloakJwkSetUri;
     @Value("${security.keycloak.audience:cinx-api}")
     private String keycloakAudience;
-    @Value("${cinx.security.authorization-freshness.token-uri:http://localhost:8180/realms/cinx/protocol/openid-connect/token}")
-    private String serviceTokenUri;
-    @Value("${cinx.security.authorization-freshness.auth-base-url:http://auth:8888}")
-    private String authBaseUrl;
-    @Value("${cinx.security.authorization-freshness.client-id:cinx-gateway-service}")
-    private String serviceClientId;
-    @Value("${cinx.security.authorization-freshness.client-secret:}")
-    private String serviceClientSecret;
-    @Value("${cinx.security.authorization-freshness.audience:cinx-auth-internal}")
-    private String serviceAudience;
 
     @Value("${cors.allowed-origins:http://localhost:*}")
     private List<String> allowedOrigins;
 
     @Bean
-    SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http) {
+    SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http, ReactiveStringRedisTemplate redis) {
         http
             .csrf(ServerHttpSecurity.CsrfSpec::disable)
             .authorizeExchange(exchanges -> exchanges
@@ -75,8 +65,10 @@ public class SecurityConfig {
                         "/api/v1/plans",
                         "/api/v1/plans/*",
                         "/api/v1/recommendations/search").permitAll()
+                // campus checks the bearer token itself when a seat is reserved; the room socket that follows carries none
+                // a lab machine's socket carries a ticket in its URL, which the runner verifies before it upgrades
                 .pathMatchers("/api/v1/payments/webhooks/**",
-                        "/ws/**", "/sockjs/**").permitAll()
+                        "/ws/**", "/sockjs/**", "/campus/**", "/lab-sessions/**").permitAll()
                 .anyExchange().authenticated()
             )
             .oauth2ResourceServer(oauth2 -> oauth2
@@ -97,19 +89,13 @@ public class SecurityConfig {
                          "Forbidden",
                          "Access denied"))
             ).cors(cors -> cors.configurationSource(corsConfigurationSource()))
-            .addFilterAfter(authorizationFreshnessWebFilter(), SecurityWebFiltersOrder.AUTHENTICATION);
+            .addFilterAfter(new AuthorizationFreshnessWebFilter(redis, Clock.systemUTC()), SecurityWebFiltersOrder.AUTHENTICATION);
         return http.build();
     }
 
     @Bean
     ReactiveJwtDecoder reactiveJwtDecoder() {
         return KeycloakReactiveJwtDecoder.create(keycloakIssuer, keycloakJwkSetUri, keycloakAudience);
-    }
-
-    @Bean
-    AuthorizationFreshnessWebFilter authorizationFreshnessWebFilter() {
-        return new AuthorizationFreshnessWebFilter(WebClient.builder(), serviceTokenUri, authBaseUrl,
-                serviceClientId, serviceClientSecret, serviceAudience, Clock.systemUTC());
     }
 
     @Bean
@@ -122,6 +108,9 @@ public class SecurityConfig {
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/api/v1/**", config);
+        // the campus SDK's matchmaking requests (the room socket that follows is not subject to CORS)
+        source.registerCorsConfiguration("/campus/**", config);
+        source.registerCorsConfiguration("/lab-sessions/**", config);
         return source;
     }
 }

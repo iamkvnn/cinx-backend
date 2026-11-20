@@ -17,6 +17,10 @@ spring:
   mail:
     username: ${SPRING_MAIL_USERNAME:}
     password: ${SPRING_MAIL_PASSWORD:}
+  data:
+    redis:
+      host: localhost
+      port: 6379
   rabbitmq:
     host: localhost
     port: 5672
