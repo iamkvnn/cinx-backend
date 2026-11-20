@@ -1,0 +1,83 @@
+schemaVersion: "1.0"
+dictionaryVersion: 1
+status: active
+description: >-
+  Vendor-neutral product events (P0-07). cinx-web sends them in batches to POST /api/v1/reporting/events;
+  reporting stores them for 180 days and rolls them up per Vietnam day. The dictionary is closed: an unknown
+  event name refuses the batch, and a prop not listed for its event is dropped. A prop never holds free text,
+  an answer, a prompt, a URL or any personal data; the user comes from the token only.
+
+envelope:
+  eventId: { type: uuid, required: true, description: "Made by the client; the deduplication key." }
+  name: { type: name, required: true }
+  occurredAt: { type: timestamp, required: true, description: "ISO-8601 with an offset, client clock." }
+  props: { type: object, required: false }
+
+# Prop types: id (≤ 64 of [A-Za-z0-9_.:-]), key (≤ 64 of [a-z0-9_]), string (a code: ≤ maxLength of
+# [A-Za-z0-9_.:-]), integer (min, max), boolean, enum (values). A required prop that is missing or does not fit
+# refuses the batch; an optional one that does not fit is dropped.
+events:
+  recommendation_shown:
+    description: A recommended course card was at least half on screen for one second; once per slate and course.
+    props:
+      recommendationId: { type: id, required: true }
+      courseId: { type: id, required: true }
+      position: { type: integer, min: 0, max: 99, required: true }
+      rankerVersion: { type: string, maxLength: 64 }
+
+  recommendation_clicked:
+    description: A recommended course card was opened.
+    props:
+      recommendationId: { type: id, required: true }
+      courseId: { type: id, required: true }
+      position: { type: integer, min: 0, max: 99 }
+
+  ai_feature_exposed:
+    description: An assistant surface was seen (launcher button, tutor panel) or opened (drawer, sheet).
+    props:
+      surface: { type: enum, values: [launcher, drawer, tutor, tutor_sheet, path_workspace], required: true }
+      placement: { type: string, maxLength: 64 }
+
+  ai_request_started:
+    description: The learner sent a message to the assistant.
+    props:
+      surface: { type: enum, values: [launcher, drawer, tutor, tutor_sheet, path_workspace], required: true }
+      placement: { type: string, maxLength: 64 }
+      mode: { type: string, maxLength: 32 }
+
+  ai_request_completed:
+    description: The assistant's answer finished streaming.
+    props:
+      surface: { type: enum, values: [launcher, drawer, tutor, tutor_sheet, path_workspace], required: true }
+      turnId: { type: id }
+      capabilityId: { type: string, maxLength: 96 }
+      durationMs: { type: integer, min: 0, max: 3600000 }
+
+  ai_request_failed:
+    description: The request was refused, the stream failed or closed early, or the learner stopped it.
+    props:
+      surface: { type: enum, values: [launcher, drawer, tutor, tutor_sheet, path_workspace], required: true }
+      stage: { type: enum, values: [request, stream, stopped], required: true }
+      code: { type: string, maxLength: 64 }
+
+  ai_feedback_submitted:
+    description: The learner reported an assistant answer ("Báo sai").
+    props:
+      turnId: { type: id, required: true }
+      reason: { type: string, maxLength: 32 }
+
+  learning_action_completed:
+    description: A learning step the product wants more of.
+    props:
+      action: { type: enum, values: [lesson_completed, quiz_submitted, review_answered, study_plan_set], required: true }
+      courseId: { type: id }
+      lessonId: { type: id }
+      correct: { type: boolean }
+
+  experiment_exposed:
+    description: >-
+      The learner reached the experiment's surface; the first one per experiment counts. Reporting recomputes the
+      variant from the user and refuses a mismatch.
+    props:
+      experimentKey: { type: key, required: true }
+      variant: { type: key, required: true }
