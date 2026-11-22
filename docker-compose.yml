@@ -71,6 +71,50 @@ services:
         condition: service_healthy
     volumes:
       - ./keycloak/realm:/opt/keycloak/data/import:ro
+  # Assistant store: sessions, pending actions, audit, DBOS workflow state and (phase 1) pgvector.
+  postgres:
+    profiles: ["assistant"]
+    image: pgvector/pgvector:pg17
+    container_name: postgres
+    ports:
+      - "5433:5432"
+    networks:
+      - cinx-network
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    env_file:
+      - ./env/dev/postgres.env
+  # Self-hosted model server; needs an NVIDIA GPU. Without one, point LLM_BASE_URL at any OpenAI-compatible endpoint.
+  vllm:
+    profiles: ["gpu"]
+    image: vllm/vllm-openai:latest
+    container_name: vllm
+    command: >
+      --model ${VLLM_MODEL:-openai/gpt-oss-20b}
+      --enable-auto-tool-choice
+      --tool-call-parser ${VLLM_TOOL_CALL_PARSER:-openai}
+      --max-model-len ${VLLM_MAX_MODEL_LEN:-32768}
+    ports:
+      - "8000:8000"
+    networks:
+      - cinx-network
+    volumes:
+      - vllm-cache:/root/.cache/huggingface
+    env_file:
+      - ./env/dev/vllm.env
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
   eureka-server:
     container_name: eureka-server
     ports:
@@ -215,3 +259,5 @@ networks:
 volumes:
   mysql-data:
   rabbitmq-data:
+  postgres-data:
+  vllm-cache:
