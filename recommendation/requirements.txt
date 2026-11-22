@@ -1,0 +1,17 @@
+fastapi
+uvicorn
+sqlalchemy
+alembic
+pymysql
+pydantic
+pydantic-settings
+scikit-learn
+numpy
+aio-pika
+openai>=2.41.1
+cryptography
+PyJWT[crypto]
+sentence-transformers
+faiss-cpu
+rank_bm25
+prometheus_client

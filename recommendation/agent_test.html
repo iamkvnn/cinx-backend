@@ -1,0 +1,1775 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CINX Recommendation Agent Tester</title>
+    <!-- Google Fonts Inter & Fira Code -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap"
+        rel="stylesheet">
+
+    <!-- Marked.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <style>
+        :root {
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-tertiary: #334155;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --accent-blue: #3b82f6;
+            --accent-purple: #8b5cf6;
+            --accent-emerald: #10b981;
+            --accent-amber: #f59e0b;
+            --accent-rose: #f43f5e;
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --glass-bg: rgba(30, 41, 59, 0.7);
+            --shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            height: 100vh;
+            display: flex;
+            overflow: hidden;
+        }
+
+        /* Layout */
+        .sidebar {
+            width: 330px;
+            background-color: var(--bg-secondary);
+            border-right: 1px solid var(--glass-border);
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            gap: 20px;
+            overflow-y: auto;
+        }
+
+        .main-chat {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: radial-gradient(circle at top right, rgba(59, 130, 246, 0.08), transparent 40%),
+                radial-gradient(circle at bottom left, rgba(139, 92, 246, 0.05), transparent 40%);
+            position: relative;
+        }
+
+        /* Typography */
+        h2 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 5px;
+            background: linear-gradient(to right, #60a5fa, #a78bfa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .section-title {
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-secondary);
+            margin-bottom: 10px;
+        }
+
+        /* Forms */
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 15px;
+        }
+
+        label {
+            font-size: 0.8rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
+
+        input[type="text"],
+        textarea {
+            background-color: rgba(15, 23, 42, 0.6);
+            border: 1px solid var(--glass-border);
+            border-radius: 8px;
+            padding: 10px 12px;
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 0.875rem;
+            transition: all 0.2s ease;
+        }
+
+        input[type="text"]:focus,
+        textarea:focus {
+            outline: none;
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .checkbox-group input {
+            cursor: pointer;
+        }
+
+        /* Session State Card */
+        .session-info-card {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 8px;
+            padding: 15px;
+            font-size: 0.8rem;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            box-shadow: var(--shadow-lg);
+        }
+
+        .session-info-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .session-info-label {
+            color: var(--text-muted);
+        }
+
+        .session-info-value {
+            font-family: 'Fira Code', monospace;
+            color: var(--text-primary);
+            max-width: 160px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .btn {
+            background-color: var(--accent-blue);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 10px 16px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background-color: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid var(--glass-border);
+        }
+
+        .btn-secondary:hover {
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+
+        /* Chat Panel */
+        .chat-header {
+            height: 60px;
+            border-bottom: 1px solid var(--glass-border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            background-color: rgba(15, 23, 42, 0.4);
+            backdrop-filter: blur(10px);
+            z-index: 10;
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .chat-input-area {
+            border-top: 1px solid var(--glass-border);
+            padding: 20px 24px;
+            background-color: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(10px);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .input-row {
+            display: flex;
+            gap: 12px;
+            position: relative;
+        }
+
+        .chat-input {
+            flex: 1;
+            background-color: rgba(15, 23, 42, 0.8);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 14px 16px;
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 0.95rem;
+            resize: none;
+            height: 52px;
+            line-height: 1.4;
+            max-height: 200px;
+            transition: all 0.2s ease;
+        }
+
+        .chat-input:focus {
+            outline: none;
+            border-color: var(--accent-purple);
+            box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.15);
+        }
+
+        /* Message Bubbles */
+        .message-row {
+            display: flex;
+            width: 100%;
+        }
+
+        .message-row.user {
+            justify-content: flex-end;
+        }
+
+        .message-row.assistant {
+            justify-content: flex-start;
+        }
+
+        .message-bubble {
+            max-width: 75%;
+            padding: 16px 20px;
+            border-radius: 16px;
+            line-height: 1.5;
+            font-size: 0.95rem;
+            box-shadow: var(--shadow-lg);
+            word-break: break-word;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .message-row.user .message-bubble {
+            background: linear-gradient(135deg, var(--accent-blue), #2563eb);
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        .message-row.assistant .message-bubble {
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--glass-border);
+            border-bottom-left-radius: 4px;
+        }
+
+        /* Message Content (Markdown styled) */
+        .message-content {
+            line-height: 1.6;
+        }
+
+        .message-content p {
+            margin-bottom: 12px;
+        }
+
+        .message-content p:last-child {
+            margin-bottom: 0;
+        }
+
+        .message-content ul,
+        .message-content ol {
+            padding-left: 20px;
+            margin-bottom: 12px;
+        }
+
+        .message-content li {
+            margin-bottom: 6px;
+        }
+
+        .message-content strong {
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .message-content code {
+            background-color: rgba(255, 255, 255, 0.1);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.85em;
+            color: #f472b6;
+        }
+
+        .message-content pre {
+            background-color: rgba(15, 23, 42, 0.8);
+            border: 1px solid var(--glass-border);
+            padding: 12px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 12px 0;
+        }
+
+        .message-content pre code {
+            background-color: transparent;
+            padding: 0;
+            color: var(--text-primary);
+            font-size: 0.85em;
+        }
+
+        .message-content h1,
+        .message-content h2,
+        .message-content h3 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-top: 14px;
+            margin-bottom: 8px;
+            color: var(--text-primary);
+        }
+
+        .message-content table {
+            border-collapse: collapse;
+            margin: 12px 0;
+            width: 100%;
+            font-size: 0.9rem;
+        }
+
+        .message-content th,
+        .message-content td {
+            border: 1px solid var(--glass-border);
+            padding: 8px 12px;
+            text-align: left;
+        }
+
+        .message-content th {
+            background-color: rgba(255, 255, 255, 0.05);
+            font-weight: 600;
+        }
+
+        /* Message Parts */
+        .message-part {
+            border-top: 1px solid var(--glass-border);
+            padding-top: 12px;
+            margin-top: 4px;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .message-part.part-text {
+            border-top: none;
+            padding-top: 0;
+            margin-top: 0;
+        }
+
+        .part-title {
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-secondary);
+            margin-bottom: 10px;
+        }
+
+        .part-loading {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            font-style: italic;
+            animation: pulse 1.5s infinite;
+        }
+
+        .part-empty {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            font-style: italic;
+        }
+
+        /* Course Cards Inside course_list part */
+        .course-list-items {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .course-card {
+            background-color: rgba(15, 23, 42, 0.4);
+            border: 1px solid var(--glass-border);
+            border-radius: 8px;
+            padding: 12px;
+            transition: all 0.2s ease;
+        }
+
+        .course-card:hover {
+            border-color: rgba(59, 130, 246, 0.3);
+            background-color: rgba(15, 23, 42, 0.6);
+        }
+
+        .course-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+
+        .course-card-title {
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: var(--text-primary);
+        }
+
+        .course-card-price {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--accent-emerald);
+        }
+
+        .course-card-desc {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            line-height: 1.4;
+            margin-bottom: 8px;
+        }
+
+        .course-card-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        /* Policy context chunks */
+        .policy-contexts {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .policy-chunk {
+            background-color: rgba(15, 23, 42, 0.3);
+            border-left: 3px solid var(--accent-blue);
+            padding: 10px 14px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            line-height: 1.45;
+            color: var(--text-secondary);
+        }
+
+        /* Learning Path Timeline Inside learning_path part */
+        .proposal-details {
+            background-color: rgba(16, 185, 129, 0.03);
+            border: 1px solid rgba(16, 185, 129, 0.15);
+            border-radius: 10px;
+            padding: 14px;
+        }
+
+        .draft-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            border-bottom: 1px solid rgba(16, 185, 129, 0.1);
+            padding-bottom: 6px;
+        }
+
+        .draft-title {
+            font-weight: 700;
+            color: #34d399;
+            font-size: 0.95rem;
+        }
+
+        .draft-status {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            font-weight: 700;
+            background-color: rgba(16, 185, 129, 0.12);
+            color: #34d399;
+            padding: 2px 6px;
+            border-radius: 4px;
+            border: 1px solid rgba(16, 185, 129, 0.2);
+        }
+
+        .draft-desc {
+            font-size: 0.825rem;
+            color: var(--text-secondary);
+            line-height: 1.4;
+        }
+
+        .draft-timeline {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            position: relative;
+            padding-left: 14px;
+            margin-top: 12px;
+        }
+
+        .draft-timeline::before {
+            content: '';
+            position: absolute;
+            left: 4px;
+            top: 5px;
+            bottom: 5px;
+            width: 2px;
+            background-color: rgba(16, 185, 129, 0.2);
+        }
+
+        .draft-timeline-item {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            background: rgba(255,255,255,0.02);
+            padding: 8px;
+            border-radius: 6px;
+            border: 1px solid var(--glass-border);
+        }
+
+        .draft-timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -14px;
+            top: 14px;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--accent-emerald);
+            border: 2px solid var(--bg-secondary);
+        }
+
+        .draft-item-title {
+            font-weight: 600;
+            font-size: 0.85rem;
+            color: var(--text-primary);
+        }
+
+        .draft-item-sub {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        /* Proposal REST controls styling */
+        .control-btn {
+            background-color: var(--bg-tertiary);
+            border: 1px solid var(--glass-border);
+            color: var(--text-primary);
+            border-radius: 4px;
+            width: 24px;
+            height: 24px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .control-btn:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+        .control-btn.delete-btn {
+            color: var(--accent-rose);
+        }
+        .control-btn.delete-btn:hover {
+            background-color: rgba(244, 63, 94, 0.15);
+        }
+
+        /* Action success / error */
+        .action-success {
+            color: var(--accent-emerald);
+            background-color: rgba(16, 185, 129, 0.08);
+            border: 1px solid rgba(16, 185, 129, 0.2);
+            padding: 10px 14px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+        }
+
+        .action-error {
+            color: var(--accent-rose);
+            background-color: rgba(244, 63, 94, 0.08);
+            border: 1px solid rgba(244, 63, 94, 0.2);
+            padding: 10px 14px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+        }
+
+        /* Suggested Actions Chips */
+        .suggested-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .action-chip {
+            background-color: rgba(139, 92, 246, 0.15);
+            border: 1px solid rgba(139, 92, 246, 0.3);
+            color: #c084fc;
+            padding: 6px 14px;
+            border-radius: 9999px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .action-chip:hover {
+            background-color: rgba(139, 92, 246, 0.3);
+            transform: translateY(-1px);
+        }
+
+        /* Intermediary steps log card */
+        .step-card {
+            border-left: 3px solid var(--accent-blue);
+            background-color: rgba(30, 41, 59, 0.4);
+            border: 1px solid var(--glass-border);
+            border-left: 3px solid var(--accent-blue);
+            border-radius: 8px;
+            padding: 12px 16px;
+            font-size: 0.85rem;
+            width: fit-content;
+            max-width: 85%;
+            margin: 4px 0;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            animation: fadeIn 0.3s ease;
+        }
+
+        .step-card.thinking {
+            border-left-color: var(--accent-purple);
+        }
+
+        .step-card.tool {
+            border-left-color: var(--accent-emerald);
+        }
+
+        .step-card.intent {
+            border-left-color: var(--accent-amber);
+        }
+
+        .step-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 600;
+        }
+
+        .step-icon {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .thinking .step-icon {
+            background-color: var(--accent-purple);
+            animation: pulse 1.5s infinite;
+        }
+
+        .tool .step-icon {
+            background-color: var(--accent-emerald);
+        }
+
+        .intent .step-icon {
+            background-color: var(--accent-amber);
+        }
+
+        .step-detail {
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+        }
+
+        .step-code {
+            background-color: rgba(15, 23, 42, 0.8);
+            border: 1px solid var(--glass-border);
+            border-radius: 6px;
+            padding: 8px;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.75rem;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            margin-top: 4px;
+            color: var(--text-secondary);
+        }
+
+        /* Citations list */
+        .citations-container {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-top: 12px;
+            border-top: 1px dashed var(--glass-border);
+            padding-top: 8px;
+        }
+
+        .citation-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.75rem;
+            color: var(--accent-blue);
+            background-color: rgba(59, 130, 246, 0.08);
+            padding: 4px 8px;
+            border-radius: 4px;
+            width: fit-content;
+            text-decoration: none;
+            border: 1px solid rgba(59, 130, 246, 0.15);
+        }
+
+        .citation-item:hover {
+            background-color: rgba(59, 130, 246, 0.15);
+        }
+
+        /* Connection statuses */
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--accent-emerald);
+            display: inline-block;
+        }
+
+        .status-dot.loading {
+            background-color: var(--accent-amber);
+            animation: pulse 1.5s infinite;
+        }
+
+        .status-dot.disconnected {
+            background-color: var(--accent-rose);
+        }
+
+        /* Animations */
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(4px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+
+            50% {
+                opacity: 0.4;
+                transform: scale(0.9);
+            }
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .badge-blue {
+            background-color: rgba(59, 130, 246, 0.12);
+            color: #60a5fa;
+            border: 1px solid rgba(59, 130, 246, 0.2);
+        }
+
+        .badge-purple {
+            background-color: rgba(139, 92, 246, 0.12);
+            color: #c084fc;
+            border: 1px solid rgba(139, 92, 246, 0.2);
+        }
+
+        .badge-emerald {
+            background-color: rgba(16, 185, 129, 0.12);
+            color: #34d399;
+            border: 1px solid rgba(16, 185, 129, 0.2);
+        }
+
+        .loading-placeholder {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            font-style: italic;
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Sidebar Info Panel -->
+    <div class="sidebar">
+        <div>
+            <h2>CINX Agent</h2>
+            <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 20px;">Recommendation Service
+                Tester</p>
+        </div>
+
+        <div class="form-group">
+            <label for="endpoint">Endpoint URL</label>
+            <input type="text" id="endpoint" value="http://localhost:8090/api/v1/recommendations/agent/chat">
+        </div>
+
+        <div class="form-group">
+            <label for="jwt-token">Bearer JWT Token (Optional)</label>
+            <textarea id="jwt-token" rows="3"
+                placeholder="Enter JWT without 'Bearer ' prefix to test authenticated tools (like commit)..."></textarea>
+        </div>
+
+        <div class="form-group">
+            <label for="session-id">Session ID</label>
+            <div style="display: flex; gap: 8px;">
+                <input type="text" id="session-id" style="flex: 1;" placeholder="Auto-generated if empty">
+                <button class="btn btn-secondary" onclick="generateNewSession()" title="New Session"
+                    style="padding: 10px;">
+                    ↻
+                </button>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <div class="checkbox-group" id="debug-group">
+                <input type="checkbox" id="debug-mode" checked>
+                <label for="debug-mode">Enable Debug Trace</label>
+            </div>
+        </div>
+
+        <div class="section-title" style="margin-top: 10px;">Session State Context</div>
+        <div class="session-info-card">
+            <div class="session-info-item">
+                <span class="session-info-label">Active Proposal ID:</span>
+                <span class="session-info-value" id="state-proposal-id">-</span>
+            </div>
+            <div class="session-info-item">
+                <span class="session-info-label">Version:</span>
+                <span class="session-info-value" id="state-proposal-version">-</span>
+            </div>
+            <div class="session-info-item">
+                <span class="session-info-label">Current Flow:</span>
+                <span class="session-info-value" id="state-flow">-</span>
+            </div>
+            <div class="session-info-item">
+                <span class="session-info-label">Last Intent:</span>
+                <span class="session-info-value" id="state-intent">-</span>
+            </div>
+            <div class="session-info-item">
+                <span class="session-info-label">Courses In Context:</span>
+                <span class="session-info-value" id="state-courses">0</span>
+            </div>
+            <button class="btn btn-secondary" style="font-size: 0.75rem; padding: 6px; width: 100%; margin-top: 5px;" onclick="fetchActiveProposal()">
+                🔄 Sync Proposal from DB
+            </button>
+        </div>
+
+        <button class="btn btn-secondary" style="margin-top: auto;" onclick="clearChat()">
+            Clear Chat Logs
+        </button>
+    </div>
+
+    <!-- Main Chat Window -->
+    <div class="main-chat">
+        <div class="chat-header">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <span class="status-dot" id="connection-status"></span>
+                <span style="font-weight: 600; font-size: 0.95rem;">Interactive Stream Console</span>
+            </div>
+            <span id="active-run-id"
+                style="font-size: 0.75rem; color: var(--text-muted); font-family: 'Fira Code', monospace;"></span>
+        </div>
+
+        <!-- Scrollable Messages Area -->
+        <div class="chat-messages" id="messages-container">
+            <div class="message-row assistant">
+                <div class="message-bubble">
+                    <div class="message-content">
+                        Xin chào! Tôi là Trợ lý Học tập CINX. Tôi có thể giúp bạn tìm kiếm khóa học, tạo hoặc chỉnh sửa
+                        lộ trình học tập, giải đáp các thắc mắc về chính sách đăng ký học và chứng chỉ của CINX. Bạn
+                        muốn học về chủ đề gì hôm nay?
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Input Area -->
+        <div class="chat-input-area">
+            <div class="suggested-actions" id="actions-container"></div>
+            
+            <div class="input-row">
+                <textarea class="chat-input" id="user-input"
+                    placeholder="Type a message or ask to design a study plan..."
+                    onkeydown="handleKeyDown(event)"></textarea>
+                <button class="btn" id="send-button" onclick="sendMessage()">
+                    Send
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentSessionId = '';
+        let activeMessageBubble = null;
+        let isGenerating = false;
+        let accumulatedText = '';
+        let activeParts = {}; // Tracks active streaming parts in the current message
+        let currentSessionState = {
+            activeProposal: null,
+            currentFlow: null,
+            lastIntent: null,
+            lastCourseIds: []
+        };
+
+        // Configure marked options
+        marked.setOptions({
+            breaks: true,
+            gfm: true
+        });
+
+        // Initialize session ID
+        window.addEventListener('DOMContentLoaded', () => {
+            generateNewSession();
+        });
+
+        function generateNewSession() {
+            currentSessionId = 'session_' + Math.random().toString(36).substring(2, 15);
+            document.getElementById('session-id').value = currentSessionId;
+            updateSessionStateUI({
+                activeProposal: null,
+                currentFlow: null,
+                lastIntent: null,
+                lastCourseIds: []
+            });
+            clearChat();
+        }
+
+        function updateSessionStateUI(state) {
+            if (state) {
+                if (state.activeProposal !== undefined) {
+                    currentSessionState.activeProposal = state.activeProposal;
+                }
+                if (state.currentFlow !== undefined) currentSessionState.currentFlow = state.currentFlow;
+                if (state.lastIntent !== undefined) currentSessionState.lastIntent = state.lastIntent;
+                if (state.lastCourseIds !== undefined) currentSessionState.lastCourseIds = state.lastCourseIds;
+            }
+            
+            const prop = currentSessionState.activeProposal;
+            document.getElementById('state-proposal-id').innerText = prop ? prop.proposalId : '-';
+            document.getElementById('state-proposal-id').title = prop ? prop.proposalId : '';
+            document.getElementById('state-proposal-version').innerText = prop ? `v${prop.version}` : '-';
+            document.getElementById('state-flow').innerText = currentSessionState.currentFlow || '-';
+            document.getElementById('state-intent').innerText = currentSessionState.lastIntent || '-';
+            document.getElementById('state-courses').innerText = (currentSessionState.lastCourseIds || []).length;
+        }
+
+        function clearChat() {
+            const container = document.getElementById('messages-container');
+            container.innerHTML = `
+                <div class="message-row assistant">
+                    <div class="message-bubble">
+                        <div class="message-content">
+                            Xin chào! Tôi là Trợ lý Học tập CINX. Tôi có thể giúp bạn tìm kiếm khóa học, tạo hoặc chỉnh sửa
+                            lộ trình học tập, giải đáp các thắc mắc về chính sách đăng ký học và chứng chỉ của CINX. Bạn
+                            muốn học về chủ đề gì hôm nay?
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.getElementById('actions-container').innerHTML = '';
+            document.getElementById('active-run-id').innerText = '';
+            activeParts = {};
+        }
+
+        function handleKeyDown(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendMessage();
+            }
+        }
+
+        async function sendMessage() {
+            if (isGenerating) return;
+
+            const inputEl = document.getElementById('user-input');
+            const messageText = inputEl.value.trim();
+            if (!messageText) return;
+
+            inputEl.value = '';
+            isGenerating = true;
+            document.getElementById('send-button').disabled = true;
+            document.getElementById('send-button').innerText = '...';
+            document.getElementById('actions-container').innerHTML = '';
+            activeParts = {};
+
+            // Render user message
+            appendUserMessage(messageText);
+
+            // Fetch current session details
+            const manualSessionId = document.getElementById('session-id').value.trim();
+            if (manualSessionId) {
+                currentSessionId = manualSessionId;
+            }
+
+            const endpoint = document.getElementById('endpoint').value;
+            const token = document.getElementById('jwt-token').value.trim();
+            const debugMode = document.getElementById('debug-mode').checked;
+
+            const headers = {
+                'Content-Type': 'application/json'
+            };
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+
+            const statusDot = document.getElementById('connection-status');
+            statusDot.className = 'status-dot loading';
+
+            // Create response bubble container for assistant
+            const assistantRow = document.createElement('div');
+            assistantRow.className = 'message-row assistant';
+            const bubble = document.createElement('div');
+            bubble.className = 'message-bubble';
+            bubble.style.minHeight = '40px';
+
+            const loadingPlaceholder = document.createElement('div');
+            loadingPlaceholder.className = 'loading-placeholder';
+            loadingPlaceholder.innerHTML = '<span style="color: var(--text-muted); font-style: italic;">Agent is thinking...</span>';
+            bubble.appendChild(loadingPlaceholder);
+            assistantRow.appendChild(bubble);
+
+            const messagesContainer = document.getElementById('messages-container');
+            messagesContainer.appendChild(assistantRow);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+            activeMessageBubble = bubble;
+
+            try {
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify({
+                        message: messageText,
+                        sessionId: currentSessionId || null,
+                        mode: debugMode ? 'debug' : 'stream'
+                    })
+                });
+
+                if (!response.ok) {
+                    const errBody = await response.json().catch(() => ({}));
+                    throw new Error(errBody.detail || `Server returned status code ${response.status}`);
+                }
+
+                statusDot.className = 'status-dot';
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const blocks = buffer.split('\n\n');
+                    buffer = blocks.pop(); // Keep the last incomplete block
+
+                    for (const block of blocks) {
+                        if (!block.trim()) continue;
+
+                        let eventType = 'message';
+                        let dataStr = '';
+
+                        const lines = block.split('\n');
+                        for (const line of lines) {
+                            if (line.startsWith('event:')) {
+                                eventType = line.substring(6).trim();
+                            } else if (line.startsWith('data:')) {
+                                dataStr += line.substring(5).trim();
+                            }
+                        }
+
+                        if (dataStr) {
+                            try {
+                                const parsedData = JSON.parse(dataStr);
+                                handleAgentEvent(eventType, parsedData);
+                            } catch (e) {
+                                console.error("Error parsing event payload:", dataStr, e);
+                            }
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error(err);
+                statusDot.className = 'status-dot disconnected';
+
+                const placeholder = bubble.querySelector('.loading-placeholder');
+                if (placeholder) {
+                    placeholder.innerHTML = `<span style="color: var(--accent-rose); font-weight: 500;">Connection Error:</span> ${err.message}`;
+                } else {
+                    const errDiv = document.createElement('div');
+                    errDiv.className = 'action-error';
+                    errDiv.style.marginTop = '10px';
+                    errDiv.innerText = `[Connection Error: ${err.message}]`;
+                    bubble.appendChild(errDiv);
+                }
+            } finally {
+                isGenerating = false;
+                document.getElementById('send-button').disabled = false;
+                document.getElementById('send-button').innerText = 'Send';
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            }
+        }
+
+        function appendUserMessage(text) {
+            const container = document.getElementById('messages-container');
+            const row = document.createElement('div');
+            row.className = 'message-row user';
+            row.innerHTML = `
+                <div class="message-bubble">
+                    ${escapeHtml(text)}
+                </div>
+            `;
+            container.appendChild(row);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function handleAgentEvent(event, payload) {
+            console.log(`Event: [${event}]`, payload);
+
+            // Extract the wrapped payload data
+            const eventData = payload.data || {};
+            const messagesContainer = document.getElementById('messages-container');
+
+            if (payload.runId) {
+                document.getElementById('active-run-id').innerText = `Run ID: ${payload.runId}`;
+            }
+
+            switch (event) {
+                case 'run_started':
+                    renderIntermediaryStep('thinking', 'Agent run initialized.', eventData);
+                    break;
+                case 'intent_detected':
+                    renderIntermediaryStep('intent', `Intent Classified: ${eventData.intent} (Confidence: ${eventData.confidence?.toFixed(2) || 'N/A'})`, eventData);
+                    updateSessionStateUI({ lastIntent: eventData.intent, currentFlow: eventData.nextFlow });
+                    break;
+                case 'tool_started':
+                    renderIntermediaryStep('tool', `Tool Executing: ${eventData.name}`, eventData.input, 'input');
+                    break;
+                case 'tool_completed':
+                    renderIntermediaryStep('tool', `Tool Completed: ${eventData.name}`, eventData.output, 'output');
+                    break;
+                case 'part_created':
+                    createMessagePart(eventData);
+                    break;
+                case 'part_updated':
+                    updateMessagePart(eventData);
+                    break;
+                case 'part_done':
+                    finalizeMessagePart(eventData);
+                    break;
+                case 'part_delta':
+                    appendPartDelta(eventData);
+                    break;
+                case 'citation_added':
+                    renderCitation(eventData);
+                    break;
+                case 'action_required':
+                    updateSessionStateUI({ awaitingConfirmation: true });
+                    break;
+                case 'error':
+                    renderError(eventData);
+                    break;
+                case 'final':
+                    renderFinalMessage(eventData);
+                    break;
+            }
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        function createMessagePart(data) {
+            const partId = data.partId;
+            const partType = data.partType;
+            const status = data.status || 'loading';
+
+            // Create container for this part
+            const partDiv = document.createElement('div');
+            partDiv.id = `part-${partId}`;
+            partDiv.className = `message-part part-${partType} status-${status}`;
+
+            if (partType === 'text') {
+                partDiv.className += ' message-content';
+            } else if (partType === 'course_list') {
+                partDiv.innerHTML = `
+                    <div class="part-title">📚 Course Recommendations</div>
+                    <div class="part-loading">Searching course catalog...</div>
+                    <div class="course-list-items"></div>
+                `;
+            } else if (partType === 'policy_result') {
+                partDiv.innerHTML = `
+                    <div class="part-title">📄 Policies & FAQ Chunk</div>
+                    <div class="part-loading">Searching policy knowledge...</div>
+                    <div class="policy-contexts"></div>
+                `;
+            } else if (partType === 'learning_path') {
+                partDiv.innerHTML = `
+                    <div class="part-title">🗺️ Recommended Study Proposal</div>
+                    <div class="part-loading">Generating roadmap...</div>
+                    <div class="proposal-details"></div>
+                `;
+            } else if (partType === 'action_result') {
+                partDiv.innerHTML = `
+                    <div class="part-title">⚙️ Action Execution Status</div>
+                    <div class="part-loading">Processing...</div>
+                    <div class="action-details"></div>
+                `;
+            } else if (partType === 'suggested_actions') {
+                partDiv.innerHTML = `
+                    <div class="suggested-actions-items" style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 5px;"></div>
+                `;
+            }
+
+            // Append to bubble
+            if (activeMessageBubble) {
+                // Clear loading placeholder on first part
+                const placeholder = activeMessageBubble.querySelector('.loading-placeholder');
+                if (placeholder) {
+                    placeholder.remove();
+                }
+
+                const citationsEl = activeMessageBubble.querySelector('.citations-container');
+                if (citationsEl) {
+                    activeMessageBubble.insertBefore(partDiv, citationsEl);
+                } else {
+                    activeMessageBubble.appendChild(partDiv);
+                }
+            }
+
+            activeParts[partId] = {
+                type: partType,
+                accumulatedText: '',
+                element: partDiv
+            };
+        }
+
+        function updateMessagePart(data) {
+            const partId = data.partId;
+            const part = activeParts[partId];
+            if (!part) return;
+
+            part.element.className = `message-part part-${part.type} status-${data.status}`;
+
+            const loadingEl = part.element.querySelector('.part-loading');
+            if (loadingEl && (data.status === 'completed' || data.status === 'empty' || data.status === 'error')) {
+                loadingEl.remove();
+            }
+
+            if (part.type === 'course_list' && data.status === 'completed' && data.items) {
+                const itemsContainer = part.element.querySelector('.course-list-items');
+                if (itemsContainer) {
+                    itemsContainer.innerHTML = data.items.map(item => `
+                        <div class="course-card">
+                            <div class="course-card-header">
+                                <span class="course-card-title">${escapeHtml(item.title)}</span>
+                                <span class="course-card-price">${item.price ? `$${item.price}` : 'Free'}</span>
+                            </div>
+                            <p class="course-card-desc">${escapeHtml(item.description || 'No description available.')}</p>
+                            <div class="course-card-meta">
+                                <span>⭐️ ${item.rating ? item.rating.toFixed(1) : 'N/A'}</span>
+                                <span>Instructor: ${escapeHtml(item.instructorName || 'N/A')}</span>
+                                <span>Category: ${escapeHtml(item.categoryName || 'N/A')}</span>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+            } else if (part.type === 'course_list' && data.status === 'empty') {
+                const itemsContainer = part.element.querySelector('.course-list-items');
+                if (itemsContainer) itemsContainer.innerHTML = '<div class="part-empty">No courses found matching criteria.</div>';
+            } else if (part.type === 'policy_result' && data.status === 'completed' && data.items) {
+                const contextContainer = part.element.querySelector('.policy-contexts');
+                if (contextContainer) {
+                    contextContainer.innerHTML = data.items.map(ctx => `
+                        <div class="policy-chunk">${escapeHtml(ctx)}</div>
+                    `).join('');
+                }
+            } else if (part.type === 'policy_result' && data.status === 'empty') {
+                const contextContainer = part.element.querySelector('.policy-contexts');
+                if (contextContainer) contextContainer.innerHTML = '<div class="part-empty">No relevant policies found.</div>';
+            } else if (part.type === 'learning_path' && data.status === 'completed' && data.proposal) {
+                const prop = data.proposal;
+
+                updateSessionStateUI({
+                    activeProposal: prop,
+                    lastCourseIds: prop.courseIds || []
+                });
+
+                const proposalDetails = part.element.querySelector('.proposal-details');
+                if (proposalDetails) {
+                    renderProposalInElement(proposalDetails, prop);
+                }
+            } else if (part.type === 'action_result' && data.status === 'completed') {
+                const actionDetails = part.element.querySelector('.action-details');
+                if (actionDetails) {
+                    actionDetails.innerHTML = `
+                        <div class="action-success">
+                            ✅ ${escapeHtml(data.result?.message || 'Operation executed successfully.')}
+                        </div>
+                    `;
+                }
+            } else if (part.type === 'suggested_actions' && data.actions) {
+                const itemsContainer = part.element.querySelector('.suggested-actions-items');
+                if (itemsContainer) {
+                    itemsContainer.innerHTML = '';
+                    data.actions.forEach(action => {
+                        const chip = document.createElement('button');
+                        chip.className = 'action-chip';
+                        chip.innerText = action.label;
+                        chip.onclick = () => handleSuggestedActionClick(action);
+                        itemsContainer.appendChild(chip);
+                    });
+                }
+            }
+        }
+
+        function finalizeMessagePart(data) {
+            const partId = data.partId;
+            const part = activeParts[partId];
+            if (!part) return;
+
+            const loadingEl = part.element.querySelector('.part-loading');
+            if (loadingEl) {
+                loadingEl.remove();
+            }
+        }
+
+        function appendPartDelta(data) {
+            const partId = data.partId;
+            const part = activeParts[partId];
+            if (!part || part.type !== 'text') return;
+
+            part.accumulatedText += data.delta;
+            part.element.innerHTML = marked.parse(part.accumulatedText);
+        }
+
+        function renderCitation(citation) {
+            if (!activeMessageBubble) return;
+
+            let container = activeMessageBubble.querySelector('.citations-container');
+            if (!container) {
+                container = document.createElement('div');
+                container.className = 'citations-container';
+                container.innerHTML = '<span style="font-size: 0.75rem; font-weight: bold; color: var(--text-secondary); margin-bottom: 2px;">Citations:</span>';
+                activeMessageBubble.appendChild(container);
+            }
+
+            const citeLink = document.createElement('a');
+            citeLink.className = 'citation-item';
+            citeLink.target = '_blank';
+
+            if (citation.sourceType === 'course') {
+                citeLink.href = '#';
+                citeLink.innerText = `📚 Course: ${citation.title || 'ID ' + citation.courseId} (Score: ${citation.score ? citation.score.toFixed(3) : '-'})`;
+            } else {
+                citeLink.href = citation.sourceUrl || '#';
+                citeLink.innerText = `📄 Document: ${citation.title || 'CMS Chunk'} (Score: ${citation.score ? citation.score.toFixed(3) : '-'})`;
+            }
+            container.appendChild(citeLink);
+        }
+
+        function renderError(data) {
+            if (!activeMessageBubble) return;
+
+            const errDiv = document.createElement('div');
+            errDiv.className = 'action-error';
+            errDiv.style.marginTop = '10px';
+            errDiv.innerHTML = `⚠️ <strong>Error [${escapeHtml(data.error?.code || 'EXECUTION_ERROR')}]:</strong> ${escapeHtml(data.error?.message || 'Failed to complete agent execution.')}`;
+
+            // Clear loading placeholder if exists
+            const placeholder = activeMessageBubble.querySelector('.loading-placeholder');
+            if (placeholder) {
+                placeholder.remove();
+            }
+
+            activeMessageBubble.appendChild(errDiv);
+        }
+
+        function renderFinalMessage(data) {
+            console.log("Stream execution final payload:", data);
+
+            // Populate suggested actions onto the bottom chat container if present
+            const container = document.getElementById('actions-container');
+            container.innerHTML = '';
+            if (data.message && data.message.actions) {
+                data.message.actions.forEach(action => {
+                    const chip = document.createElement('button');
+                    chip.className = 'action-chip';
+                    chip.innerText = action.label;
+                    chip.onclick = () => handleSuggestedActionClick(action);
+                    container.appendChild(chip);
+                });
+            }
+        }
+
+        function handleSuggestedActionClick(action) {
+            const inputEl = document.getElementById('user-input');
+            let messageText = '';
+
+            if (action.type === 'LEARNING_PATH_COMMIT' || action.type === 'COMMIT_LEARNING_PATH' || action.type === 'CREATE_LEARNING_PATH') {
+                messageText = action.label || '';
+            } else if (action.type === 'LEARNING_PATH_EDIT') {
+                messageText = action.label || '';
+            } else {
+                messageText = action.label;
+            }
+
+            inputEl.value = messageText;
+            sendMessage();
+        }
+
+        function renderIntermediaryStep(type, title, payload, payloadRole = '') {
+            const container = document.getElementById('messages-container');
+            const stepEl = document.createElement('div');
+            stepEl.className = `step-card ${type}`;
+
+            let labelBadge = '';
+            if (type === 'thinking') labelBadge = '<span class="badge badge-purple">Reasoning</span>';
+            if (type === 'intent') labelBadge = '<span class="badge badge-blue">Routing</span>';
+            if (type === 'tool') labelBadge = '<span class="badge badge-emerald">Tool Call</span>';
+
+            let jsonString = '';
+            if (payload) {
+                try {
+                    jsonString = JSON.stringify(payload, null, 2);
+                } catch (e) { }
+            }
+
+            stepEl.innerHTML = `
+                <div class="step-header">
+                    <span class="step-icon"></span>
+                    <span class="step-header-text">${escapeHtml(title)}</span>
+                    ${labelBadge}
+                </div>
+                ${jsonString ? `
+                    <div class="step-detail">
+                        <span style="font-size: 0.725rem; color: var(--text-muted);">${payloadRole ? payloadRole.toUpperCase() + ' VARIABLES' : 'DATA'}</span>
+                        <div class="step-code">${escapeHtml(jsonString)}</div>
+                    </div>
+                ` : ''}
+            `;
+
+            if (activeMessageBubble && activeMessageBubble.parentElement) {
+                container.insertBefore(stepEl, activeMessageBubble.parentElement);
+            } else {
+                container.appendChild(stepEl);
+            }
+        }
+
+        /* Direct REST API Call Helpers for testing the Proposal routes */
+
+        async function fetchActiveProposal() {
+            const endpoint = document.getElementById('endpoint').value;
+            const baseUri = endpoint.substring(0, endpoint.lastIndexOf('/'));
+            const getUrl = `${baseUri}/sessions/${currentSessionId}/proposal`;
+            
+            const token = document.getElementById('jwt-token').value.trim();
+            const headers = {};
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
+            try {
+                const response = await fetch(getUrl, { headers });
+                if (!response.ok) {
+                    console.log("No active proposal found for this session in database.");
+                    updateSessionStateUI({ activeProposal: null });
+                    return;
+                }
+                
+                const prop = await response.json();
+                updateSessionStateUI({ activeProposal: prop });
+                
+                // Find or create a bubble in chat to render this proposal
+                let proposalBox = document.querySelector('.proposal-details');
+                if (!proposalBox) {
+                    // Create an assistant message bubble representing synced state
+                    const container = document.getElementById('messages-container');
+                    const row = document.createElement('div');
+                    row.className = 'message-row assistant';
+                    row.innerHTML = `
+                        <div class="message-bubble">
+                            <div class="part-title">🔄 Synced Active Proposal</div>
+                            <div class="proposal-details"></div>
+                        </div>
+                    `;
+                    container.appendChild(row);
+                    container.scrollTop = container.scrollHeight;
+                    proposalBox = row.querySelector('.proposal-details');
+                }
+                
+                renderProposalInElement(proposalBox, prop);
+            } catch (err) {
+                console.error("Failed to sync active proposal from DB:", err);
+            }
+        }
+
+        async function patchProposal(operationData) {
+            const endpoint = document.getElementById('endpoint').value;
+            const baseUri = endpoint.substring(0, endpoint.lastIndexOf('/'));
+            const patchUrl = `${baseUri}/sessions/${currentSessionId}/proposal`;
+            
+            const token = document.getElementById('jwt-token').value.trim();
+            const headers = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
+            const activeProp = currentSessionState.activeProposal;
+            if (!activeProp) {
+                alert("No active proposal to update in state. Please create one or Sync from DB first.");
+                return;
+            }
+
+            const body = {
+                version: activeProp.version,
+                ...operationData
+            };
+
+            try {
+                const response = await fetch(patchUrl, {
+                    method: 'PATCH',
+                    headers: headers,
+                    body: JSON.stringify(body)
+                });
+
+                const updatedProp = await response.json();
+                if (!response.ok) {
+                    throw new Error(updatedProp.detail || `Server returned ${response.status}`);
+                }
+
+                updateSessionStateUI({ activeProposal: updatedProp });
+                
+                // Re-render the latest proposal element in the DOM
+                const latestProposalEl = document.querySelector('.proposal-details');
+                if (latestProposalEl) {
+                    renderProposalInElement(latestProposalEl, updatedProp);
+                }
+            } catch (err) {
+                alert(`Failed to update proposal via REST: ${err.message}`);
+            }
+        }
+
+        async function commitActiveProposal(proposalId, version) {
+            const endpoint = document.getElementById('endpoint').value;
+            const baseUri = endpoint.substring(0, endpoint.lastIndexOf('/'));
+            const commitUrl = `${baseUri}/sessions/${currentSessionId}/proposal/create`;
+            
+            const token = document.getElementById('jwt-token').value.trim();
+            const headers = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
+            const commitBtn = document.getElementById(`commit-btn-${proposalId}`);
+            if (commitBtn) {
+                commitBtn.disabled = true;
+                commitBtn.innerText = 'Creating learning path...';
+            }
+
+            try {
+                const response = await fetch(commitUrl, {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify({
+                        proposalId: proposalId,
+                        version: version,
+                        confirmed: true
+                    })
+                });
+
+                const result = await response.json();
+                if (!response.ok) {
+                    throw new Error(result.detail || `Server returned ${response.status}`);
+                }
+
+                alert(`Success! Learning path successfully created.\nID: ${result.data?.id || result.id || 'N/A'}`);
+                await fetchActiveProposal();
+            } catch (err) {
+                alert(`Failed to commit proposal: ${err.message}`);
+                if (commitBtn) {
+                    commitBtn.disabled = false;
+                    commitBtn.innerText = '🚀 Commit & Create';
+                }
+            }
+        }
+
+        /* Proposal Interactive Component Renderers */
+
+        function renderProposalInElement(element, prop) {
+            let itemsHtml = '';
+            if (prop.items && prop.items.length > 0) {
+                itemsHtml = prop.items.map((item, index) => {
+                    const isFirst = index === 0;
+                    const isLast = index === prop.items.length - 1;
+                    
+                    return `
+                        <div class="draft-timeline-item">
+                            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                                <div>
+                                    <span class="draft-item-title">${index + 1}. ${escapeHtml(item.lessonTitle || 'Lesson')}</span>
+                                    <span class="draft-item-sub">Course: ${escapeHtml(item.courseTitle || 'Unknown')} (${item.isSuggested ? 'Suggested' : 'Manual'})</span>
+                                </div>
+                                <div class="proposal-item-controls" style="display: flex; gap: 4px;">
+                                    ${!isFirst ? `<button onclick="moveProposalItem('${item.lessonId}', ${index - 1})" title="Move Up" class="control-btn">↑</button>` : ''}
+                                    ${!isLast ? `<button onclick="moveProposalItem('${item.lessonId}', ${index + 1})" title="Move Down" class="control-btn">↓</button>` : ''}
+                                    <button onclick="removeProposalItem('${item.lessonId}')" title="Remove" class="control-btn delete-btn">🗑️</button>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            } else {
+                itemsHtml = '<div style="font-size: 0.8rem; color: var(--text-muted); font-style: italic;">No lessons in this proposal roadmap.</div>';
+            }
+
+            const isProposed = prop.status === 'PROPOSED';
+
+            element.innerHTML = `
+                <div class="draft-header">
+                    <span class="draft-title">🗺️ ${escapeHtml(prop.title)}</span>
+                    <span class="draft-status">${prop.status} (v${prop.version})</span>
+                </div>
+                ${prop.description ? `<p class="draft-desc">${escapeHtml(prop.description)}</p>` : ''}
+                
+                <!-- Edit Metadata Form (Collapsible) -->
+                <div id="meta-edit-${prop.proposalId}" class="meta-edit-form" style="display: none; margin-top: 10px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 6px;">
+                    <div class="form-group" style="margin-bottom: 8px;">
+                        <label style="font-size: 0.75rem; color: var(--text-secondary);">Title</label>
+                        <input type="text" id="edit-title-${prop.proposalId}" value="${escapeHtml(prop.title)}" style="font-size: 0.8rem; padding: 6px 8px; width: 100%;">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 8px;">
+                        <label style="font-size: 0.75rem; color: var(--text-secondary);">Description</label>
+                        <textarea id="edit-desc-${prop.proposalId}" rows="2" style="font-size: 0.8rem; padding: 6px 8px; width: 100%;">${escapeHtml(prop.description || '')}</textarea>
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn btn-secondary" style="font-size: 0.75rem; padding: 4px 8px;" onclick="toggleMetaEdit('${prop.proposalId}')">Cancel</button>
+                        <button class="btn" style="font-size: 0.75rem; padding: 4px 8px; background-color: var(--accent-emerald);" onclick="saveProposalMeta('${prop.proposalId}')">Save</button>
+                    </div>
+                </div>
+
+                <div class="draft-timeline" style="margin-top: 12px;">
+                    ${itemsHtml}
+                </div>
+
+                ${isProposed ? `
+                    <div style="display: flex; gap: 8px; margin-top: 16px; border-top: 1px solid var(--glass-border); padding-top: 12px;">
+                        <button class="btn btn-secondary" style="font-size: 0.8rem; padding: 6px 12px; flex: 1;" onclick="toggleMetaEdit('${prop.proposalId}')">
+                            📝 Edit Meta
+                        </button>
+                        <button class="btn" id="commit-btn-${prop.proposalId}" style="font-size: 0.8rem; padding: 6px 12px; flex: 2; background-color: var(--accent-emerald);" onclick="commitActiveProposal('${prop.proposalId}', ${prop.version})">
+                            🚀 Commit & Create
+                        </button>
+                    </div>
+                ` : ''}
+            `;
+        }
+
+        function removeProposalItem(lessonId) {
+            if (confirm("Are you sure you want to remove this lesson from the proposal?")) {
+                patchProposal({
+                    operation: {
+                        operation: "REMOVE_ITEM",
+                        lessonId: lessonId
+                    }
+                });
+            }
+        }
+
+        function moveProposalItem(lessonId, targetIndex) {
+            patchProposal({
+                operation: {
+                    operation: "MOVE_ITEM",
+                    lessonId: lessonId,
+                    orderIndex: targetIndex
+                }
+            });
+        }
+
+        function toggleMetaEdit(proposalId) {
+            const form = document.getElementById(`meta-edit-${proposalId}`);
+            if (form) {
+                form.style.display = form.style.display === 'none' ? 'block' : 'none';
+            }
+        }
+
+        function saveProposalMeta(proposalId) {
+            const title = document.getElementById(`edit-title-${proposalId}`).value.trim();
+            const description = document.getElementById(`edit-desc-${proposalId}`).value.trim();
+            
+            patchProposal({
+                operation: {
+                    operation: "UPDATE_METADATA",
+                    title: title,
+                    description: description
+                }
+            });
+            toggleMetaEdit(proposalId);
+        }
+
+        function escapeHtml(text) {
+            if (typeof text !== 'string') return '';
+            return text
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+    </script>
+</body>
+
+</html>
