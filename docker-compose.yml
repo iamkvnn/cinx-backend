@@ -71,6 +71,24 @@ services:
         condition: service_healthy
     volumes:
       - ./keycloak/realm:/opt/keycloak/data/import:ro
+  # Assistant store: sessions, pending actions, audit, DBOS workflow state and (phase 1) pgvector.
+  postgres:
+    profiles: ["assistant"]
+    image: pgvector/pgvector:pg17
+    container_name: postgres
+    ports:
+      - "5433:5432"
+    networks:
+      - cinx-network
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    env_file:
+      - ./env/dev/postgres.env
   eureka-server:
     container_name: eureka-server
     ports:
@@ -215,3 +233,4 @@ networks:
 volumes:
   mysql-data:
   rabbitmq-data:
+  postgres-data:
