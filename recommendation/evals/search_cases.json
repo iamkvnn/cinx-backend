@@ -1,0 +1,21 @@
+[
+  {"query": "lập trình Python cho người mới", "expect": {"titleKeywords": ["python"]}},
+  {"query": "python beginner", "expect": {"titleKeywords": ["python"]}},
+  {"query": "React", "expect": {"titleKeywords": ["react"]}},
+  {"query": "JavaScript cơ bản", "expect": {"titleKeywords": ["javascript", "js"]}},
+  {"query": "phát triển web frontend", "expect": {"anyCategory": ["web"], "titleKeywords": ["html", "css", "react", "frontend", "web"]}},
+  {"query": "SQL và cơ sở dữ liệu", "expect": {"titleKeywords": ["sql", "database", "co so du lieu"]}},
+  {"query": "phân tích dữ liệu", "expect": {"anyCategory": ["data"], "titleKeywords": ["data", "du lieu", "excel", "sql", "python"]}},
+  {"query": "machine learning", "expect": {"titleKeywords": ["machine learning", "ml", "ai", "hoc may"]}},
+  {"query": "Excel văn phòng", "expect": {"titleKeywords": ["excel"]}},
+  {"query": "thiết kế đồ họa Photoshop", "expect": {"anyCategory": ["design", "thiet ke"], "titleKeywords": ["photoshop", "design", "thiet ke"]}},
+  {"query": "digital marketing", "expect": {"anyCategory": ["marketing"], "titleKeywords": ["marketing"]}},
+  {"query": "tiếng Anh giao tiếp", "expect": {"titleKeywords": ["tieng anh", "english"]}},
+  {"query": "python", "filters": {"maxPrice": 500000}, "expect": {"titleKeywords": ["python"]}},
+  {"query": "khóa học có chứng chỉ", "filters": {"hasCertificate": true}, "expect": {"any": true}},
+
+  {"query": "công thức nấu phở bò", "expect": {"empty": true}},
+  {"query": "sửa xe máy tại nhà", "expect": {"empty": true}},
+  {"query": "lịch thi đấu bóng đá tối nay", "expect": {"empty": true}},
+  {"query": "horoscope for Leo this week", "expect": {"empty": true}}
+]
