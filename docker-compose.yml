@@ -89,6 +89,32 @@ services:
       retries: 5
     env_file:
       - ./env/dev/postgres.env
+  # Self-hosted model server; needs an NVIDIA GPU. Without one, point LLM_BASE_URL at any OpenAI-compatible endpoint.
+  vllm:
+    profiles: ["gpu"]
+    image: vllm/vllm-openai:latest
+    container_name: vllm
+    command: >
+      --model ${VLLM_MODEL:-openai/gpt-oss-20b}
+      --enable-auto-tool-choice
+      --tool-call-parser ${VLLM_TOOL_CALL_PARSER:-openai}
+      --max-model-len ${VLLM_MAX_MODEL_LEN:-32768}
+    ports:
+      - "8000:8000"
+    networks:
+      - cinx-network
+    volumes:
+      - vllm-cache:/root/.cache/huggingface
+    env_file:
+      - ./env/dev/vllm.env
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
   eureka-server:
     container_name: eureka-server
     ports:
@@ -234,3 +260,4 @@ volumes:
   mysql-data:
   rabbitmq-data:
   postgres-data:
+  vllm-cache:
