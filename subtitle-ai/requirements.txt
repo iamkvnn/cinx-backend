@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+pydantic
+pydantic-settings
+aio-pika
+openai
+boto3
+faster-whisper
+prometheus_client
