@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 services=(auth commerce gateway learning notification reporting user)
-python_configs=(recommendation/app/core/config.py subtitle-ai/app/core/config.py)
+python_configs=(recommendation/app/core/config.py subtitle-ai/app/core/config.py assistant/app/core/config.py)
 # Node services read their settings in one config module, like the Python ones
 node_configs=(campus/src/config.ts runner/src/config.ts)
 failures=0
